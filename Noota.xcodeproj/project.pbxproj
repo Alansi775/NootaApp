@@ -6,6 +6,17 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B31222052E1E037D00657BB5 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = B31222042E1E037D00657BB5 /* GoogleSignIn */; };
+		B31222072E1E037D00657BB5 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = B31222062E1E037D00657BB5 /* GoogleSignInSwift */; };
+		B3C26ADD2E1C3E8E00BF9002 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26ADC2E1C3E8E00BF9002 /* FirebaseAuth */; };
+		B3C26ADF2E1C3E8E00BF9002 /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26ADE2E1C3E8E00BF9002 /* FirebaseAuthCombine-Community */; };
+		B3C26AE12E1C3E8E00BF9002 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26AE02E1C3E8E00BF9002 /* FirebaseDatabase */; };
+		B3C26AE32E1C3E8E00BF9002 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26AE22E1C3E8E00BF9002 /* FirebaseFirestore */; };
+		B3C26AE52E1C3E8E00BF9002 /* FirebaseFirestoreCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26AE42E1C3E8E00BF9002 /* FirebaseFirestoreCombine-Community */; };
+		B3C26AE72E1C3E8E00BF9002 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26AE62E1C3E8E00BF9002 /* FirebaseStorage */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		B3C26A5D2E1C38D600BF9002 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -29,9 +40,22 @@
 		B3C26A662E1C38D600BF9002 /* NootaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NootaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B36B0BAD2E1C580100FB72BB /* Exceptions for "Noota" folder in "Noota" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B3C26A4B2E1C38D400BF9002 /* Noota */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B3C26A4E2E1C38D400BF9002 /* Noota */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B36B0BAD2E1C580100FB72BB /* Exceptions for "Noota" folder in "Noota" target */,
+			);
 			path = Noota;
 			sourceTree = "<group>";
 		};
@@ -52,6 +76,14 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B3C26AE12E1C3E8E00BF9002 /* FirebaseDatabase in Frameworks */,
+				B3C26AE32E1C3E8E00BF9002 /* FirebaseFirestore in Frameworks */,
+				B3C26ADD2E1C3E8E00BF9002 /* FirebaseAuth in Frameworks */,
+				B31222072E1E037D00657BB5 /* GoogleSignInSwift in Frameworks */,
+				B3C26AE52E1C3E8E00BF9002 /* FirebaseFirestoreCombine-Community in Frameworks */,
+				B3C26ADF2E1C3E8E00BF9002 /* FirebaseAuthCombine-Community in Frameworks */,
+				B3C26AE72E1C3E8E00BF9002 /* FirebaseStorage in Frameworks */,
+				B31222052E1E037D00657BB5 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +144,14 @@
 			);
 			name = Noota;
 			packageProductDependencies = (
+				B3C26ADC2E1C3E8E00BF9002 /* FirebaseAuth */,
+				B3C26ADE2E1C3E8E00BF9002 /* FirebaseAuthCombine-Community */,
+				B3C26AE02E1C3E8E00BF9002 /* FirebaseDatabase */,
+				B3C26AE22E1C3E8E00BF9002 /* FirebaseFirestore */,
+				B3C26AE42E1C3E8E00BF9002 /* FirebaseFirestoreCombine-Community */,
+				B3C26AE62E1C3E8E00BF9002 /* FirebaseStorage */,
+				B31222042E1E037D00657BB5 /* GoogleSignIn */,
+				B31222062E1E037D00657BB5 /* GoogleSignInSwift */,
 			);
 			productName = Noota;
 			productReference = B3C26A4C2E1C38D400BF9002 /* Noota.app */;
@@ -195,6 +235,10 @@
 			);
 			mainGroup = B3C26A432E1C38D400BF9002;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				B31222032E1E037D00657BB5 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B3C26A4D2E1C38D400BF9002 /* Products */;
 			projectDirPath = "";
@@ -393,17 +437,23 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Noota/Noota.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Noota/Preview Content\"";
 				DEVELOPMENT_TEAM = 4384CMSNNM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Noota/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Noota needs camera access to scan QR codes for joining chat rooms.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Noota needs access to your microphone for speech recognition and translation";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Noota uses speech recognition to convert your voice into text for translation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -422,17 +472,23 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Noota/Noota.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Noota/Preview Content\"";
 				DEVELOPMENT_TEAM = 4384CMSNNM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Noota/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Noota needs camera access to scan QR codes for joining chat rooms.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Noota needs access to your microphone for speech recognition and translation";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Noota uses speech recognition to convert your voice into text for translation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -558,6 +614,68 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B31222032E1E037D00657BB5 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
+		B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.15.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B31222042E1E037D00657BB5 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B31222032E1E037D00657BB5 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		B31222062E1E037D00657BB5 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B31222032E1E037D00657BB5 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
+		B3C26ADC2E1C3E8E00BF9002 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		B3C26ADE2E1C3E8E00BF9002 /* FirebaseAuthCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseAuthCombine-Community";
+		};
+		B3C26AE02E1C3E8E00BF9002 /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
+		};
+		B3C26AE22E1C3E8E00BF9002 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		B3C26AE42E1C3E8E00BF9002 /* FirebaseFirestoreCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseFirestoreCombine-Community";
+		};
+		B3C26AE62E1C3E8E00BF9002 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = B3C26A442E1C38D400BF9002 /* Project object */;
 }
