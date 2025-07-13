@@ -16,23 +16,41 @@ Noota is an innovative application that connects you with others through seamles
 
 ## Screenshots
 
-### 1. Welcome Screen
-![Welcome Screen](screenshots/0.png)
+<p align="center">
+  <img src="Noota/screenshots/0.png" width="200" alt="Login Page">
+  <br>
+  **1. Login Page**
+</p>
 
-### 2. Create Room Screen
-![Create Room Screen](screenshots/1.png)
+<p align="center">
+  <img src="Noota/screenshots/1.png" width="200" alt="Create Your Account Screen">
+  <br>
+  **2. Create Your Account Screen**
+</p>
 
-### 3. QR Code Display
-![QR Code Display](screenshots/2.png)
+<p align="center">
+  <img src="Noota/screenshots/2.png" width="200" alt="Login Error Notification">
+  <br>
+  **3. Password or Email is Incorrect Notification**
+</p>
 
-### 4. Scan QR Code / Enter Room ID
-![Scan QR Code / Enter Room ID](screenshots/3.png)
+<p align="center">
+  <img src="Noota/screenshots/3.png" width="200" alt="Home Page">
+  <br>
+  **4. Home Page**
+</p>
 
-### 5. Pairing / Waiting for Opponent
-![Pairing / Waiting for Opponent](screenshots/4.png)
+<p align="center">
+  <img src="Noota/screenshots/4.png" width="200" alt="Create Room & QR Code Display">
+  <br>
+  **5. Create New Room (QR Code & Room ID)**
+</p>
 
-### 6. Conversation View
-![Conversation View](screenshots/5.png)
+<p align="center">
+  <img src="Noota/screenshots/5.png" width="200" alt="Automatic Transition to Conversation Page">
+  <br>
+  **6. Automatic Transition to Conversation Page**
+</p>
 
 ---
 
