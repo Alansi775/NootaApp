@@ -259,27 +259,16 @@ struct MainAppView: View {
             
             // ✨ التعديل هنا: استخدام pairingVM.showConversationView
             .navigationDestination(isPresented: $pairingVM.showConversationView) {
-                // نضمن أن البيانات موجودة قبل تمريرها
                 if let room = pairingVM.currentRoom,
                    let currentUser = authService.user,
-                   let opponentUser = pairingVM.opponentUser { // استخدام opponentUser من PairingViewModel
-                    
-                    // ✨ يجب أن نمرر الآن Room و CurrentUser و OpponentUser
-                    ConversationView(
-                        room: room,
-                        currentUser: currentUser,
-                        opponentUser: opponentUser, // نمرر كائن User كامل
-                        pairingVM: pairingVM
-                    )
-                    // عندما يتم الخروج من ConversationView (بالضغط على زر الرجوع أو leave room)
-                    .onDisappear {
-                        // هذا سيتم التعامل معه بواسطة زر "Leave Room" داخل ConversationView
-                        // أو إذا تم حذف الغرفة من طرف آخر، فإن `pairingVM.currentRoom` سيصبح `nil`
-                        // وهذا سيؤدي إلى تعيين `pairingVM.showConversationView = false` تلقائيا
-                        Logger.log("ConversationView disappeared.", level: .info)
-                    }
+                   let opponentUser = pairingVM.opponentUser {
+
+                    // ✨ التعديل هنا: إنشاء و تمرير ConversationViewModel
+                    ConversationView(viewModel: ConversationViewModel(room: room, currentUser: currentUser, opponentUser: opponentUser, firestoreService: firestoreService))
+                        .onDisappear {
+                            Logger.log("ConversationView disappeared.", level: .info)
+                        }
                 } else {
-                    // Fallback view or error message if data is missing
                     Text("Error: Room data, current user, or opponent info missing. Please try again.")
                         .foregroundColor(.red)
                         .padding()

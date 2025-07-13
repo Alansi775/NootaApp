@@ -175,41 +175,31 @@ class FirestoreService: ObservableObject {
     }
     
     // دالة لمغادرة الغرفة (إزالة المستخدم من قائمة المشاركين)
-    func leaveRoom(roomID: String, participantUserID: String) async throws {
-        let roomRef = db.collection("rooms").document(roomID)
-        
-        do {
-            var room = try await roomRef.getDocument(as: Room.self)
-            
-            // إزالة المستخدم من قائمة المشاركين
-            room.participantUIDs.removeAll(where: { $0 == participantUserID })
-            
-            if room.participantUIDs.isEmpty {
-                // إذا لم يتبق أي مشاركين، احذف الغرفة
-                try await roomRef.delete()
-                Logger.log("Room \(roomID) deleted as all participants left.", level: .info)
-            } else {
-                // وإلا، قم بتحديث الغرفة بعد إزالة المشارك
-                // إذا كان عدد المشاركين أقل من 2 بعد المغادرة، قم بتغيير الحالة إلى "pending"
-                if room.participantUIDs.count < 2 {
-                    room.status = .pending
-                }
-                try await roomRef.setData(from: room, merge: true)
-                Logger.log("User \(participantUserID) left room \(roomID). Remaining participants: \(room.participantUIDs.count)", level: .info)
-            }
-            self.stopListeningToRoom() // إيقاف الاستماع لهذه الغرفة
-        } catch let error as DecodingError {
-            if case .dataCorrupted(let context) = error, context.debugDescription.contains("document not found") {
-                Logger.log("Attempted to leave room \(roomID) but it was not found.", level: .warning)
-            } else {
-                Logger.log("Error decoding room during leave attempt: \(error.localizedDescription)", level: .error)
-                throw error
-            }
-        } catch {
-            Logger.log("Failed to leave room \(roomID): \(error.localizedDescription)", level: .error)
-            throw error
-        }
-    }
+    // ✨ تعديل دالة مغادرة الغرفة لتتناسب مع اسم البارامتر
+     func leaveRoom(roomID: String, participantUserID: String) async {
+         let roomRef = db.collection("rooms").document(roomID)
+         
+         do {
+             // قم بإزالة الـ participantUserID من قائمة participantUIDs
+             try await roomRef.updateData([
+                 "participantUIDs": FieldValue.arrayRemove([participantUserID])
+             ])
+             
+             Logger.log("User \(participantUserID) left room \(roomID).", level: .info)
+             
+             // تحقق إذا لم يتبق أحد في الغرفة، قم بتغيير الحالة إلى ended
+             let roomDoc = try await roomRef.getDocument()
+             if let roomData = roomDoc.data(),
+                let currentParticipants = roomData["participantUIDs"] as? [String],
+                currentParticipants.isEmpty {
+                 try await roomRef.updateData(["status": Room.Status.ended.rawValue])
+                 Logger.log("Room \(roomID) status changed to ended as all participants left.", level: .info)
+             }
+             
+         } catch {
+             Logger.log("Error leaving room \(roomID) for user \(participantUserID): \(error.localizedDescription)", level: .error)
+         }
+     }
 
     
     func listenToMessages(roomID: String, completion: @escaping ([Message], Error?) -> Void) -> ListenerRegistration {
@@ -239,27 +229,28 @@ class FirestoreService: ObservableObject {
         }
     }
     
-    func listenToRoomMessages(roomID: String) -> AnyPublisher<[Message], Error> {
-        let subject = PassthroughSubject<[Message], Error>() // قم بإنشاء PassthroughSubject
+    func listenToRoomMessages(roomID: String) -> AnyPublisher<[ChatMessage], Error> { // ✨ تم تغيير [Message] إلى [ChatMessage]
+        let subject = PassthroughSubject<[ChatMessage], Error>() // ✨ تم تغيير [Message] إلى [ChatMessage]
 
         let listener = self.db.collection("rooms").document(roomID).collection("messages")
             .order(by: "timestamp", descending: false)
             .addSnapshotListener { querySnapshot, error in
                 if let error = error {
                     Logger.log("Error listening to messages in room \(roomID): \(error.localizedDescription)", level: .error)
-                    subject.send(completion: .failure(error)) // استخدم subject.send(completion:)
+                    subject.send(completion: .failure(error))
                     return
                 }
 
                 guard let documents = querySnapshot?.documents else {
-                    subject.send([]) // استخدم subject.send()
+                    subject.send([])
                     return
                 }
 
-                let messages = documents.compactMap { document -> Message? in
-                    try? document.data(as: Message.self)
+                // ✨ هنا يجب أن تقوم بفك تشفير المستندات إلى ChatMessage.self
+                let messages = documents.compactMap { document -> ChatMessage? in // ✨ تم تغيير Message.self إلى ChatMessage.self
+                    try? document.data(as: ChatMessage.self) // تأكد أن ChatMessage conforms to Codable
                 }
-                subject.send(messages) // استخدم subject.send()
+                subject.send(messages)
             }
 
         return subject.handleEvents(receiveCancel: {
@@ -278,4 +269,40 @@ class FirestoreService: ObservableObject {
         func deleteRoom(roomID: String) async throws {
             try await db.collection("rooms").document(roomID).delete()
         }
+    
+    // ✨ دالة لإضافة رسالة إلى مجموعة فرعية (sub-collection) للرسائل
+     func addMessageToRoom(roomID: String, message: ChatMessage) async {
+         let roomMessagesCollection = db.collection("rooms").document(roomID).collection("messages")
+         
+         do {
+             // Firebase Firestore لا يدعم الترميز المباشر لـ Timestamp في Struct
+             // لذا سنستخدم Date ونحولها يدويا عند الحاجة
+             // أو يمكننا تعريف Timestamp داخل ChatMessage كـ Date
+             let messageData: [String: Any] = [
+                 "id": message.id,
+                 "senderUID": message.senderUID,
+                 "text": message.text,
+                 "translatedText": message.translatedText as Any, // استخدم as Any للتعامل مع الاختياري
+                 "timestamp": Timestamp(date: message.timestamp) // تحويل Date إلى Timestamp
+             ]
+             
+             try await roomMessagesCollection.addDocument(data: messageData)
+             Logger.log("Message added to room \(roomID).", level: .info)
+         } catch {
+             Logger.log("Error adding message to room \(roomID): \(error.localizedDescription)", level: .error)
+         }
+     }
+    
+    // ✨ دالة جديدة لتحديث لغة مشارك في الغرفة
+    func updateRoomParticipantLanguage(roomID: String, userID: String, languageCode: String) async {
+        let roomRef = db.collection("rooms").document(roomID)
+        let data = ["participantLanguages.\(userID)": languageCode] // تحديث حقل مدمج
+        
+        do {
+            try await roomRef.updateData(data)
+            Logger.log("User \(userID) language updated to \(languageCode) in room \(roomID).", level: .info)
+        } catch {
+            Logger.log("Error updating participant language in room \(roomID) for user \(userID): \(error.localizedDescription)", level: .error)
+        }
+    }
 }
