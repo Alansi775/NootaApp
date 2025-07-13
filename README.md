@@ -19,37 +19,37 @@ Noota is an innovative application that connects you with others through seamles
 <p align="center">
   <img src="screenshots/0.png" width="200" alt="Login Page">
   <br>
-  **1. Login Page**
+  1. Login Page
 </p>
 
 <p align="center">
   <img src="screenshots/1.png" width="200" alt="Create Your Account Screen">
   <br>
-  **2. Create Your Account Screen**
+  2. Create Your Account Screen
 </p>
 
 <p align="center">
   <img src="screenshots/2.png" width="200" alt="Login Error Notification">
   <br>
-  **3. Password or Email is Incorrect Notification**
+  3. Password or Email is Incorrect Notification
 </p>
 
 <p align="center">
   <img src="screenshots/3.png" width="200" alt="Home Page">
   <br>
-  **4. Home Page**
+  4. Home Page
 </p>
 
 <p align="center">
   <img src="screenshots/4.png" width="200" alt="Create Room & QR Code Display">
   <br>
-  **5. Create New Room (QR Code & Room ID)**
+  5. Create New Room (QR Code & Room ID)
 </p>
 
 <p align="center">
   <img src="screenshots/5.png" width="200" alt="Automatic Transition to Conversation Page">
   <br>
-  **6. Automatic Transition to Conversation Page**
+  6. Automatic Transition to Conversation Page
 </p>
 
 ---
