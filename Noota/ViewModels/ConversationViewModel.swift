@@ -1,183 +1,444 @@
-// Noota/ViewModels/ConversationViewModel.swift
 import Foundation
 import Combine
 import SwiftUI
-import FirebaseFirestore // أضف هذا الاستيراد للتعرف على Timestamp (إذا كنت تستخدمه في نماذج أخرى)
+import FirebaseFirestore
+import Speech
+import AVFoundation
 
 class ConversationViewModel: ObservableObject {
-    @Published var currentRoom: Room
+    @Published var room: Room
     @Published var currentUser: User
     @Published var opponentUser: User
     
-    @Published var selectedLanguage: String // لغة المستخدم الحالي
-    @Published var opponentLanguage: String? // لغة المستخدم الآخر
-
+    @Published var selectedLanguage: String
+    @Published var opponentLanguage: String?
+    
     @Published var isRecording: Bool = false
-    @Published var recordedText: String = ""
-    @Published var translatedText: String = ""
+    @Published var displayedMessage: String?
+    @Published var speechStatusText: String = "Tap to start conversation..."
+    @Published var errorMessage: ErrorAlert?
+    @Published var liveRecognizedText: String = ""
     
-    @Published var messages: [ChatMessage] = []
+    // ✅ إضافة مؤشرات للنظام المستمر
+    @Published var isContinuousMode: Bool = false
+    @Published var totalMessagesSent: Int = 0
+    @Published var lastSentMessage: String = ""
+    @Published var connectionStatus: String = "Ready"
     
-    private let firestoreService: FirestoreService
+    let firestoreService: FirestoreService
+    let authService: AuthService
+    var speechManager: SpeechManager
+    var translationService: TranslationService
+    var textToSpeechService: TextToSpeechService
+    
     private var cancellables = Set<AnyCancellable>()
+    private var messagesListener: ListenerRegistration?
+    private var roomListener: ListenerRegistration?
+    
+    // ✅ متغيرات لإدارة الرسائل المرسلة
+    private var sentMessagesHistory: Set<String> = []
+    private var messageQueue: [String] = []
+    private var isProcessingQueue = false
 
-    let supportedLanguages = [
+    let supportedLanguages: [String: String] = [
         "English": "en-US",
         "العربية": "ar-SA",
-        "Türkçe": "tr-TR"
+        "Türkçe": "tr-TR",
+        "Español": "es-ES",
+        "Français": "fr-FR",
+        "Deutsch": "de-DE",
+        "Italiano": "it-IT",
+        "Português": "pt-BR",
+        "Русский": "ru-RU",
+        "日本語": "ja-JP",
+        "简体中文": "zh-CN",
+        "한국어": "ko-KR"
     ]
     
-    init(room: Room, currentUser: User, opponentUser: User, firestoreService: FirestoreService) {
-        self.currentRoom = room
+    init(room: Room, currentUser: User, opponentUser: User, firestoreService: FirestoreService, authService: AuthService, speechManager: SpeechManager, translationService: TranslationService, textToSpeechService: TextToSpeechService) {
+        self.room = room
         self.currentUser = currentUser
         self.opponentUser = opponentUser
         self.firestoreService = firestoreService
+        self.authService = authService
+        self.speechManager = speechManager
+        self.translationService = translationService
+        self.textToSpeechService = textToSpeechService
         
-        // ✨ القيمة الافتراضية: حاول قراءة لغة المستخدم من الغرفة، وإلا فاستخدم "en-US"
-        self.selectedLanguage = room.participantLanguages?[currentUser.uid] ?? "en-US"
-        
-        // ✨ قم بتهيئة لغة الخصم أيضًا عند التهيئة
+        self.selectedLanguage = currentUser.preferredLanguageCode ?? "en-US"
         self.opponentLanguage = room.participantLanguages?[opponentUser.uid]
         
-        setupFirestoreListener()
-        setupMessagesListener() // تأكد من وجود دالة للاستماع إلى الرسائل
+        setupSpeechManagerBindings()
+        
+        Logger.log("ConversationViewModel initialized for room: \(room.id ?? "N/A")", level: .info)
+        Logger.log("Current user: \(currentUser.username ?? "N/A"), Lang: \(selectedLanguage)", level: .info)
+        Logger.log("Opponent user: \(opponentUser.username ?? "N/A"), Lang: \(opponentLanguage ?? "N/A")", level: .info)
     }
-
-    private func setupFirestoreListener() {
-        firestoreService.$currentFirestoreRoom
-            .compactMap { $0 }
-            .filter { [weak self] room in room.id == self?.currentRoom.id }
-            .sink { [weak self] updatedRoom in
+    
+    func onAppear() {
+        setupRoomListener()
+        setupMessagesListener()
+        
+        Task { @MainActor in
+            await updateMyLanguageInRoom(languageCode: selectedLanguage)
+        }
+        Logger.log("ConversationViewModel onAppear called.", level: .info)
+    }
+    
+    func onDisappear() {
+        speechManager.stopContinuousRecording()
+        speechManager.reset()
+        messagesListener?.remove()
+        roomListener?.remove()
+        cancellables.forEach { $0.cancel() }
+        textToSpeechService.stopSpeaking()
+        isContinuousMode = false
+        Logger.log("ConversationViewModel onDisappear called, cleaned up resources.", level: .info)
+    }
+    
+    private func setupSpeechManagerBindings() {
+        // ✅ ربط حالة التسجيل
+        speechManager.$isRecording
+            .sink { [weak self] recording in
+                self?.isRecording = recording
+                if recording {
+                    self?.connectionStatus = "Listening..."
+                } else if self?.isContinuousMode == true {
+                    self?.connectionStatus = "Processing..."
+                } else {
+                    self?.connectionStatus = "Ready"
+                }
+            }
+            .store(in: &cancellables)
+            
+        // ✅ الاستماع للجمل المكتملة من النظام الجديد
+        speechManager.completedSentencePublisher
+            .filter { !$0.isEmpty }
+            .removeDuplicates()
+            .sink { [weak self] completedSentence in
                 guard let self = self else { return }
                 
-                // تحديث الغرفة
-                self.currentRoom = updatedRoom
+                Logger.log("Received completed sentence: '\(completedSentence)'", level: .info)
                 
-                // ✨ تحديث لغة المستخدم الحالي من الغرفة المحدثة
-                if let myLang = updatedRoom.participantLanguages?[self.currentUser.uid],
-                   self.selectedLanguage != myLang {
-                    self.selectedLanguage = myLang
-                    Logger.log("My language updated to: \(myLang) from Firestore.", level: .info)
+                // ✅ إضافة الرسالة إلى طابور المعالجة
+                self.addToMessageQueue(completedSentence)
+            }
+            .store(in: &cancellables)
+            
+        // ✅ النص المباشر - للعرض فقط
+        speechManager.$liveRecognizedText
+            .sink { [weak self] liveText in
+                guard let self = self else { return }
+                self.liveRecognizedText = liveText
+                
+                if self.isContinuousMode && !liveText.isEmpty {
+                    self.speechStatusText = "Speaking..."
+                } else if self.isContinuousMode {
+                    self.speechStatusText = "Listening..."
+                } else {
+                    self.speechStatusText = "Tap to start conversation..."
+                }
+            }
+            .store(in: &cancellables)
+
+        // ✅ معالجة الأخطاء (بدون إيقاف النظام المستمر)
+        speechManager.$error
+            .compactMap { $0 }
+            .sink { [weak self] error in
+                guard let self = self else { return }
+                
+                // ✅ في النظام المستمر، نسجل الخطأ لكن لا نوقف العملية
+                Logger.log("SpeechManager Warning: \(error.localizedDescription)", level: .warning)
+                
+                // ✅ لا نعرض رسائل خطأ للمستخدم في النظام المستمر
+                if !self.isContinuousMode {
+                    self.errorMessage = ErrorAlert(message: error.localizedDescription)
+                    self.speechStatusText = "Error: \(error.localizedDescription)"
                 }
                 
-                // تحديث لغة الخصم
-                if let languages = updatedRoom.participantLanguages,
-                   let oppLang = languages[self.opponentUser.uid],
-                   self.opponentLanguage != oppLang {
-                    self.opponentLanguage = oppLang
-                    Logger.log("Opponent language updated to: \(oppLang)", level: .info)
+                // ✅ تنظيف الخطأ بعد فترة قصيرة
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.speechManager.error = nil
                 }
             }
             .store(in: &cancellables)
     }
     
-    // ✨ دالة للاستماع إلى الرسائل (مهمة لعرض الرسائل في الواجهة)
-    private func setupMessagesListener() {
-            guard let roomID = currentRoom.id else {
-                Logger.log("Cannot setup messages listener: Room ID is nil.", level: .error)
-                return
-            }
-            
-            // ✨ هذا هو التغيير الرئيسي: استخدام .sink للاشتراك في الـ Publisher
-            firestoreService.listenToRoomMessages(roomID: roomID)
-                .sink { completion in
-                    // هنا يمكنك التعامل مع حالات اكتمال الـ Publisher (مثل .finished أو .failure)
-                    switch completion {
-                    case .finished:
-                        Logger.log("Message listener finished for room: \(roomID)", level: .info)
-                    case .failure(let error):
-                        Logger.log("Error in message listener for room \(roomID): \(error.localizedDescription)", level: .error)
-                        // يمكنك عرض تنبيه للمستخدم هنا إذا كان الخطأ حرجًا
-                    }
-                } receiveValue: { [weak self] fetchedMessages in
-                    // هنا تتلقى القيم الجديدة (مصفوفة الرسائل)
-                    guard let self = self else { return }
-                    DispatchQueue.main.async {
-                        // فرز الرسائل حسب الطابع الزمني لضمان الترتيب الصحيح
-                        self.messages = fetchedMessages.sorted(by: { $0.timestamp < $1.timestamp })
-                        Logger.log("Fetched \(self.messages.count) messages for room \(roomID).", level: .info)
-                    }
-                }
-                .store(in: &cancellables) // مهم جدًا: تخزين الـ cancellable لمنع إيقاف الـ listener مبكرًا
-        }
-    
-    @MainActor
-    func updateMyLanguageInRoom(languageCode: String) async {
-        guard let roomID = currentRoom.id else {
-            Logger.log("Failed to get roomID for language update.", level: .error)
+    // ✅ إضافة رسالة إلى طابور المعالجة
+    private func addToMessageQueue(_ message: String) {
+        let cleanMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard !cleanMessage.isEmpty && !sentMessagesHistory.contains(cleanMessage) else {
+            Logger.log("Skipping duplicate or empty message: '\(cleanMessage)'", level: .debug)
             return
         }
         
-        // ✨ قم بتحديث القيمة المحلية مباشرة لتنعكس في الواجهة فورًا
-        self.selectedLanguage = languageCode
+        messageQueue.append(cleanMessage)
+        sentMessagesHistory.insert(cleanMessage)
+        processMessageQueue()
+    }
+    
+    // ✅ معالجة طابور الرسائل
+    private func processMessageQueue() {
+        guard !isProcessingQueue && !messageQueue.isEmpty else { return }
         
-        await firestoreService.updateRoomParticipantLanguage(roomID: roomID, userID: currentUser.uid, languageCode: languageCode)
-        Logger.log("Attempted to update my language in Firestore to: \(languageCode)", level: .info)
+        isProcessingQueue = true
+        let messageToSend = messageQueue.removeFirst()
+        
+        Task { @MainActor in
+            await sendOriginalMessage(text: messageToSend, languageCode: selectedLanguage)
+            
+            // ✅ انتظار قصير بين الرسائل
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 ثانية
+            
+            isProcessingQueue = false
+            
+            // ✅ معالجة الرسالة التالية إذا كانت موجودة
+            if !messageQueue.isEmpty {
+                processMessageQueue()
+            }
+        }
     }
+    
+    private func setupRoomListener() {
+        guard let roomID = room.id else {
+            Logger.log("Cannot setup room listener: Room ID is nil.", level: .error)
+            return
+        }
 
-    func startRecording() {
-        isRecording = true
-        recordedText = "" // مسح النص المسجل القديم
-        translatedText = "" // مسح النص المترجم القديم
-        Logger.log("Start recording...", level: .info)
-        // ✨ هنا يجب أن تبدأ عملية التعرف على الكلام
+        roomListener = firestoreService.listenToRoom(roomID: roomID) { [weak self] result in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let updatedRoom):
+                    self.room = updatedRoom
+                    Logger.log("Room updated from Firestore via listener: \(updatedRoom.id ?? "N/A"), Status: \(updatedRoom.status.rawValue)", level: .info)
+                    
+                    if let myLang = updatedRoom.participantLanguages?[self.currentUser.uid], self.selectedLanguage != myLang {
+                        self.selectedLanguage = myLang
+                        self.currentUser.preferredLanguageCode = myLang
+                        Logger.log("My language updated from Firestore room doc to: \(myLang)", level: .info)
+                    }
+                    
+                    if let languages = updatedRoom.participantLanguages,
+                       let oppLang = languages[self.opponentUser.uid], self.opponentLanguage != oppLang {
+                        self.opponentLanguage = oppLang
+                        Logger.log("Opponent language updated to: \(oppLang) from Firestore room doc.", level: .info)
+                    }
+                    
+                case .failure(let error):
+                    Logger.log("Error listening to room updates: \(error.localizedDescription)", level: .error)
+                    // ✅ لا نعرض أخطاء الشبكة في النظام المستمر
+                    if !self.isContinuousMode {
+                        self.errorMessage = ErrorAlert(message: "Failed to listen to room: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
     }
+    
+    private func setupMessagesListener() {
+        guard let roomID = room.id else {
+            Logger.log("Cannot setup messages listener: Room ID is nil.", level: .error)
+            return
+        }
 
-    func stopRecording() {
-        isRecording = false
-        Logger.log("Stop recording.", level: .info)
-        // ✨ هنا يجب أن تتوقف عملية التعرف على الكلام ومعالجة النص المسجل
-        // على سبيل المثال، استدعاء translateAndSendMessage
-        // translateAndSendMessage(text: recordedText, fromLanguage: selectedLanguage, toLanguage: opponentLanguage ?? "en-US")
+        messagesListener?.remove()
+
+        messagesListener = Firestore.firestore().collection("rooms").document(roomID).collection("messages")
+            .order(by: "timestamp", descending: true)
+            .limit(to: 1)
+            .addSnapshotListener { [weak self] (querySnapshot, error) in
+                guard let self = self else { return }
+
+                if let error = error {
+                    Logger.log("Error getting messages: \(error.localizedDescription)", level: .error)
+                    // ✅ لا نعرض أخطاء الشبكة في النظام المستمر
+                    if !self.isContinuousMode {
+                        self.errorMessage = ErrorAlert(message: "Failed to load messages: \(error.localizedDescription)")
+                    }
+                    return
+                }
+
+                guard let documents = querySnapshot?.documents else {
+                    Logger.log("No messages available.", level: .info)
+                    return
+                }
+
+                if let latestDocument = documents.first {
+                    do {
+                        let message = try latestDocument.data(as: ChatMessage.self)
+
+                        if message.senderUID != self.currentUser.uid {
+                            Logger.log("Received new message from opponent: \(message.text)", level: .info)
+                            self.displayedMessage = message.text
+                            self.connectionStatus = "Message received"
+                            self.textToSpeechService.speak(text: message.text, languageCode: message.originalLanguageCode)
+                            
+                            // ✅ إعادة ضبط الحالة بعد قليل
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                if self.isContinuousMode {
+                                    self.connectionStatus = "Listening..."
+                                }
+                            }
+                        } else {
+                            Logger.log("Received my own message: \(message.text)", level: .info)
+                            self.lastSentMessage = message.text
+                            self.totalMessagesSent += 1
+                            self.connectionStatus = "Message sent"
+                            self.displayedMessage = nil
+                            self.liveRecognizedText = ""
+                        }
+                    } catch {
+                        Logger.log("Error decoding message: \(error.localizedDescription)", level: .error)
+                        if !self.isContinuousMode {
+                            self.errorMessage = ErrorAlert(message: "Failed to decode message: \(error.localizedDescription)")
+                        }
+                    }
+                }
+            }
+    }
+    
+    // ✅ تعديل وظيفة toggleRecording
+    func toggleContinuousRecording() {
+        if isContinuousMode {
+            speechManager.stopContinuousRecording()
+            isContinuousMode = false
+            speechStatusText = "Tap to start conversation..."
+            connectionStatus = "Ready"
+            liveRecognizedText = ""
+            // ✅ معالجة آخر جملة في البافر قبل الإيقاف
+            speechManager.stopRecording()
+        } else {
+            displayedMessage = nil
+            liveRecognizedText = ""
+            isContinuousMode = true
+            speechManager.startContinuousRecording(languageCode: selectedLanguage)
+            speechStatusText = "Listening..."
+            connectionStatus = "Connected"
+            // ✅ إعادة تعيين السجل عند بدء محادثة جديدة
+            sentMessagesHistory.removeAll()
+            messageQueue.removeAll()
+            isProcessingQueue = false
+        }
     }
     
     @MainActor
-    func translateAndSendMessage(text: String, fromLanguage: String, toLanguage: String) async {
-        Logger.log("Translating '\(text)' from \(fromLanguage) to \(toLanguage).", level: .info)
+    func sendOriginalMessage(text: String, languageCode: String) async {
+        guard let roomID = room.id else {
+            Logger.log("Failed to get roomID for sending message.", level: .error)
+            return
+        }
         
-        // افتراضيًا، النص المترجم هو نفسه النص الأصلي إذا لم يكن هناك ترجمة فعلية بعد
-        var finalTranslatedText: String? = nil
-        // ✨ هنا يجب عليك استدعاء خدمة الترجمة الفعلية
-        // على سبيل المثال:
-        // if let translated = await TranslationService.shared.translate(text: text, from: fromLanguage, to: toLanguage) {
-        //     finalTranslatedText = translated
-        // } else {
-        //     finalTranslatedText = "Translation failed for: \(text)" // رسالة خطأ
-        // }
+        guard !text.isEmpty else {
+            Logger.log("Not sending empty message.", level: .info)
+            return
+        }
         
-        // لغرض الاختبار حتى يتم تطبيق خدمة الترجمة الفعلية:
-        finalTranslatedText = "Translated: \(text)"
+        let newMessage = ChatMessage(
+            id: UUID().uuidString,
+            senderUID: currentUser.uid,
+            text: text,
+            originalLanguageCode: languageCode,
+            timestamp: Date(),
+            originalText: text,
+            translatedText: nil,
+            targetLanguageCode: otherParticipantLanguageCode(),
+            senderPreferredVoiceGender: currentUser.preferredVoiceGender ?? VoiceGender.default.rawValue
+        )
         
-        let newMessage = ChatMessage(id: UUID().uuidString, senderUID: currentUser.uid, text: text, translatedText: finalTranslatedText, timestamp: Date())
-        
-        // إضافة الرسالة إلى Firestore
-        if let roomID = currentRoom.id {
-            await firestoreService.addMessageToRoom(roomID: roomID, message: newMessage)
-            Logger.log("Message added to Firestore: \(newMessage.id)", level: .info)
-        } else {
-            Logger.log("Failed to add message: Room ID is nil.", level: .error)
+        do {
+            try await firestoreService.addMessageToRoom(roomID: roomID, message: newMessage)
+            Logger.log("Final message sent to Firestore: \(text)", level: .info)
+            self.speechStatusText = "Message sent."
+        } catch {
+            Logger.log("Error sending message to Firestore: \(error.localizedDescription)", level: .error)
+            self.errorMessage = ErrorAlert(message: "Failed to send message: \(error.localizedDescription)")
+            self.speechStatusText = "Failed to send message."
         }
     }
-
+    
     @MainActor
-    func leaveRoom() async {
-        Logger.log("Leaving room: \(currentRoom.id ?? "N/A")", level: .info)
-        if let roomID = currentRoom.id {
-            await firestoreService.leaveRoom(roomID: roomID, participantUserID: currentUser.uid)
-        } else {
-            Logger.log("Failed to leave room: Room ID is nil.", level: .error)
+    func updateMyLanguageInRoom(languageCode: String) async {
+        guard let roomID = room.id else {
+            Logger.log("Failed to get roomID for language update.", level: .error)
+            return
         }
+
+        self.selectedLanguage = languageCode
+        self.currentUser.preferredLanguageCode = languageCode
+        Logger.log("Attempting to update selectedLanguage locally to: \(languageCode) and currentUser.preferredLanguageCode", level: .debug)
+
+        do {
+            try await firestoreService.updateUserPreferredLanguage(userID: currentUser.uid, languageCode: languageCode)
+            Logger.log("✅ Successfully updated user's preferred language in Firestore (user doc) to: \(languageCode)", level: .info)
+        } catch {
+            Logger.log("❌ ERROR updating user's preferred language in Firestore (user doc): \(error.localizedDescription)", level: .error)
+            self.errorMessage = ErrorAlert(message: "Failed to save preferred language: \(error.localizedDescription)")
+        }
+
+        if room.participantLanguages == nil {
+            room.participantLanguages = [:]
+        }
+        room.participantLanguages?[currentUser.uid] = languageCode
+        Logger.log("Attempting to update room participantLanguages locally for \(currentUser.uid) to: \(languageCode)", level: .debug)
+
+        await firestoreService.updateRoomParticipantLanguage(roomID: roomID, userID: currentUser.uid, languageCode: languageCode)
+        Logger.log("✅ Successfully attempted to update participant language in Firestore (room doc) to: \(languageCode)", level: .info)
+    }
+    
+    // الكود الجديد والمُعدَّل
+        @MainActor
+        func leaveRoom() async {
+            Logger.log("Attempting to leave room: \(room.id ?? "N/A")", level: .info)
+            guard let roomID = room.id else {
+                Logger.log("Failed to leave room: Room ID is nil.", level: .error)
+                return
+            }
+
+            do {
+                // ✅ الآن، دالة leaveRoom في FirestoreService هي المسؤولة عن كل شيء
+                try await firestoreService.leaveRoom(roomID: roomID, participantUserID: currentUser.uid)
+                
+                Logger.log("User \(currentUser.uid) has successfully left and the room was processed.", level: .info)
+                
+                // ✅ إيقاف جميع عمليات الاستماع والتسجيل
+                onDisappear()
+
+            } catch {
+                Logger.log("Error leaving room: \(error.localizedDescription)", level: .error)
+                self.errorMessage = ErrorAlert(message: "Failed to leave conversation: \(error.localizedDescription)")
+            }
+        }
+    
+    @MainActor
+    private func translateText(_ text: String, sourceLanguageCode: String, targetLanguageCode: String) async -> String? {
+        return nil
+    }
+
+    private func otherParticipantLanguageCode() -> String {
+        if let opponentUID = room.participantUIDs.first(where: { $0 != currentUser.uid }),
+           let opponentLang = room.participantLanguages?[opponentUID] {
+            return opponentLang
+        }
+        return selectedLanguage == "en-US" ? "ar-SA" : "en-US"
     }
 }
 
-// تعريف هيكل الرسالة (ChatMessage)
+// تعريف ChatMessage و ErrorAlert
 struct ChatMessage: Identifiable, Codable, Equatable {
-    let id: String
+    @DocumentID var id: String?
     let senderUID: String
-    let text: String // النص الأصلي
-    var translatedText: String? // النص المترجم (اختياري)
-    let timestamp: Date // استخدام Date بدلاً من Timestamp لتوافق Codable
-    
-    // يمكن لـ FirebaseFirestore SDK التعامل مع تحويل Date إلى Timestamp تلقائيًا عند حفظها
-    // والعكس صحيح عند قراءة Timestamp كـ Date.
+    let text: String
+    let originalLanguageCode: String
+    let timestamp: Date
+    let originalText: String
+    let translatedText: String?
+    let targetLanguageCode: String
+    let senderPreferredVoiceGender: String
+}
+
+struct ErrorAlert: Identifiable {
+    let id = UUID()
+    let message: String
 }

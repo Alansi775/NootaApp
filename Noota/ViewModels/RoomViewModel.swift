@@ -1,4 +1,3 @@
-// Noota/ViewModels/RoomViewModel.swift
 import Foundation
 import Combine
 import FirebaseFirestore
@@ -14,7 +13,7 @@ import AVFoundation // لـ AVSpeechSynthesizer
 class RoomViewModel: ObservableObject {
     @Published var roomID: String
     @Published var currentUser: User
-    @Published var messages: [Message] = []
+    @Published var messages: [ChatMessage] = []
     @Published var otherParticipant: User?
     @Published var userLanguageCode: String = "en"
     @Published var hasSelectedLanguage: Bool = false
@@ -37,7 +36,8 @@ class RoomViewModel: ObservableObject {
         self.speechManager = speechManager
         self.translationService = translationService
         
-        firestoreService.listenToRoomRealtime(roomID: roomID)
+        // تعيين لغة المستخدم الحالية من المستخدم المحقون
+        self.userLanguageCode = currentUser.preferredLanguageCode ?? "en-US" // استخدام الافتراضي إذا لم يكن موجودًا
 
         firestoreService.$currentFirestoreRoom
             .sink { [weak self] room in
@@ -46,6 +46,12 @@ class RoomViewModel: ObservableObject {
                 if let room = room, room.id == self.roomID {
                     self.updateParticipants(room: room)
                     self.updateMicrophoneControl(room: room)
+                    // تحديث لغة المستخدم الحالي إذا تغيرت في الغرفة (عبر Firebase)
+                    if let myLang = room.participantLanguages?[self.currentUser.uid],
+                       self.userLanguageCode != myLang {
+                        self.userLanguageCode = myLang
+                        Logger.log("My language updated to: \(myLang) from Firestore in RoomViewModel.", level: .info)
+                    }
                 } else if room == nil {
                     self.errorMessage = "Room no longer exists."
                     Logger.log("Room \(self.roomID) no longer exists.", level: .warning)
@@ -53,11 +59,16 @@ class RoomViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        speechManager.$transcribedText
-            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+        // MARK: Fix 1: Change $transcribedText to $recognizedText
+        speechManager.$recognizedText
+            // MARK: Fix 2: Explicitly define the time unit for debounce
+            .debounce(for: .seconds(0.3), scheduler: DispatchQueue.main) // Using .seconds(0.3) for clarity
             .removeDuplicates()
-            .sink { [weak self] text in
+            // MARK: Fix 3: Add type annotation for 'text'
+            .sink { [weak self] (text: String) in
                 guard let self = self else { return }
+                // Use speechManager.liveRecognizedText if you want to send partial results
+                // However, handleTranscribedText is likely for final results, so recognizedText is correct here.
                 if self.speechManager.isRecording && !text.isEmpty {
                     self.handleTranscribedText(text)
                 }
@@ -67,7 +78,12 @@ class RoomViewModel: ObservableObject {
         speechManager.$isRecording
             .sink { [weak self] isRecording in
                 guard let self = self else { return }
+                // This condition makes more sense if it passes the microphone AFTER
+                // the current user has finished speaking and isRecording goes false.
+                // If it's intended to pass immediately when they stop, this is fine.
                 if !isRecording && self.canSpeak {
+                    // Consider if you want to pass microphone only if there's actual spoken text
+                    // or just when recording stops regardless of input.
                     self.passMicrophoneToOtherUser()
                 }
             }
@@ -100,7 +116,7 @@ class RoomViewModel: ObservableObject {
 
     private func updateParticipants(room: Room) {
         let otherParticipantUID = room.participantUIDs.first(where: { $0 != currentUser.id })
-        
+            
         if let uid = otherParticipantUID {
             Task { @MainActor in
                 do {
@@ -125,7 +141,7 @@ class RoomViewModel: ObservableObject {
             self.activeSpeakerUID = currentUser.id
             Logger.log("Initial active speaker set to host: \(currentUser.id)", level: .info)
         }
-        
+            
         self.canSpeak = (self.activeSpeakerUID == currentUser.id)
         Logger.log("Microphone control: Current active speaker is \(self.activeSpeakerUID ?? "None"). Can current user speak: \(self.canSpeak)", level: .info)
     }
@@ -140,11 +156,8 @@ class RoomViewModel: ObservableObject {
         if speechManager.isRecording {
             speechManager.stopRecording()
         } else {
-            // 💡 الإصلاح هنا: لا نمرر اللغة حاليًا حتى نعدل SpeechManager.
-            // هذا السطر سيمر إذا كانت دالة startRecording() في SpeechManager لا تقبل معاملات
-            // أو سيعطي خطأ إذا كانت تقبل معاملات مختلفة.
-            // بعد حل أخطاء البناء، سنعدل SpeechManager لتقبل languageCode.
-            speechManager.startRecording()
+            // MARK: Fix 4: Pass languageCode to startRecording()
+            speechManager.startRecording(languageCode: userLanguageCode) // Pass the user's language code
         }
     }
     
@@ -160,18 +173,22 @@ class RoomViewModel: ObservableObject {
                 
                 Logger.log("Translated text: \(translatedText)", level: .debug)
                 
-                // ✨ إنشاء Message باستخدام الخصائص الإضافية التي لديك
-                let newMessage = Message(
-                    senderUID: self.currentUser.id ?? "unknown",
-                    originalText: text,
-                    translatedText: translatedText, // هذا الآن String? لكن تم ضمانه بـ String غير اختياري من ترجمة
+                // ✨ هذا هو الإصلاح الرئيسي لإنشاء ChatMessage
+                // يجب أن تتطابق الباراميترات مع تعريف ChatMessage struct بالضبط
+                let newChatMessage = ChatMessage(
+                    id: UUID().uuidString, // ID للرسالة الجديدة
+                    senderUID: currentUser.id ?? "unknown",
+                    text: text, // النص الأصلي الذي تم التحدث به
                     originalLanguageCode: userLanguageCode,
-                    targetLanguageCode: targetLanguageCode,
-                    senderPreferredVoiceGender: self.currentUser.preferredVoiceGender ?? VoiceGender.default.rawValue, // استخدام VoiceGender من User model
-                    timestamp: Date() // Timestamp في Message.swift هي Date الآن
+                    timestamp: Date(), // التاريخ والوقت الحالي
+                    originalText: text, // النص الأصلي
+                    translatedText: translatedText, // النص المترجم
+                    targetLanguageCode: targetLanguageCode, // لغة الهدف
+                    senderPreferredVoiceGender: currentUser.preferredVoiceGender ?? VoiceGender.default.rawValue // جنس الصوت المفضل للمرسل
                 )
                 
-                try await self.sendMessageToFirestore(message: newMessage)
+                try await self.firestoreService.addMessageToRoom(roomID: roomID, message: newChatMessage)
+                Logger.log("Message sent to Firestore successfully.", level: .info)
                 
             } catch {
                 errorMessage = "Translation or sending message failed: \(error.localizedDescription)"
@@ -182,17 +199,20 @@ class RoomViewModel: ObservableObject {
 
     private func otherParticipantLanguageCode() -> String {
         // ✨ هنا يجب أن تحاول جلب لغة الطرف الآخر من otherParticipant
-        return otherParticipant?.userLanguageCode ?? (userLanguageCode == "en" ? "ar" : "en")
+        // إذا لم يكن هناك otherParticipant أو كانت لغته غير محددة،
+        // افترض لغة بديلة (مثلاً، إذا كانت لغتي الإنجليزية، فالأخرى العربية، والعكس)
+        // يجب أن نستخدم لغة `userLanguageCode` الحالية للمستخدم
+        return otherParticipant?.preferredLanguageCode ?? (userLanguageCode == "en-US" ? "ar-SA" : "en-US")
     }
 
-    private func sendMessageToFirestore(message: Message) async throws {
-        try await firestoreService.sendMessage(toRoomID: roomID, message: message)
+    private func sendMessageToFirestore(message: ChatMessage) async throws { // ✨ تأكد من نوع الرسالة ChatMessage
+        try await firestoreService.addMessageToRoom(roomID: roomID, message: message) // ✨ الاسم الصحيح للدالة
         Logger.log("Message sent to Firestore successfully.", level: .info)
     }
     
     private func passMicrophoneToOtherUser() {
         guard let currentRoom = firestoreService.currentFirestoreRoom else { return }
-        
+            
         let participants = currentRoom.participantUIDs
         if participants.count > 1 {
             if let activeSpeaker = activeSpeakerUID {
@@ -230,9 +250,9 @@ class RoomViewModel: ObservableObject {
         speechManager.stopRecording()
         messageListener?.remove()
         firestoreService.stopListeningToRoom()
-        
+            
         do {
-            try await firestoreService.deleteRoom(roomID: roomID)
+            try await firestoreService.deleteRoomAndSubcollections(roomID: roomID)
             Logger.log("Room \(roomID) deleted successfully.", level: .info)
         } catch {
             errorMessage = "Failed to end conversation: \(error.localizedDescription)"
@@ -241,10 +261,15 @@ class RoomViewModel: ObservableObject {
     }
     
     func speakTranslatedText(_ text: String) {
-        // 💡 الإصلاح هنا: هذا هو المكان الذي سنستدعي فيه دالة speak من SpeechManager لاحقًا.
-        // حاليًا، فقط للـ logging.
-        // #warning("Implement speak function in SpeechManager and call it here")
+        // This is where you would call your TextToSpeechService to speak the text.
+        // Assuming you have an instance of TextToSpeechService available, e.g., injected like SpeechManager.
+        // For now, let's just log and remind ourselves.
+        // You'll need to define a TextToSpeechService property and inject it similarly to SpeechManager.
         Logger.log("Attempting to speak: \(text)", level: .info)
+            
+        // Example if you have a TextToSpeechService injected:
+        // self.textToSpeechService.speak(text: text, languageCode: userLanguageCode) // Or otherParticipantLanguageCode()
+        // If TextToSpeechService is not injected in RoomViewModel, you might need to adjust or inject it.
     }
 
     deinit {

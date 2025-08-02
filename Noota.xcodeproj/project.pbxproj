@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		B31222052E1E037D00657BB5 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = B31222042E1E037D00657BB5 /* GoogleSignIn */; };
 		B31222072E1E037D00657BB5 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = B31222062E1E037D00657BB5 /* GoogleSignInSwift */; };
+		B3AE95F42E3002D9003677FA /* Translation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B3AE95F32E3002D9003677FA /* Translation.framework */; };
 		B3C26ADD2E1C3E8E00BF9002 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26ADC2E1C3E8E00BF9002 /* FirebaseAuth */; };
 		B3C26ADF2E1C3E8E00BF9002 /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26ADE2E1C3E8E00BF9002 /* FirebaseAuthCombine-Community */; };
 		B3C26AE12E1C3E8E00BF9002 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26AE02E1C3E8E00BF9002 /* FirebaseDatabase */; };
@@ -35,6 +36,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		B3AE95F32E3002D9003677FA /* Translation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Translation.framework; path = System/Library/Frameworks/Translation.framework; sourceTree = SDKROOT; };
 		B3C26A4C2E1C38D400BF9002 /* Noota.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Noota.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B3C26A5C2E1C38D600BF9002 /* NootaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NootaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B3C26A662E1C38D600BF9002 /* NootaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NootaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -79,6 +81,7 @@
 				B3C26AE12E1C3E8E00BF9002 /* FirebaseDatabase in Frameworks */,
 				B3C26AE32E1C3E8E00BF9002 /* FirebaseFirestore in Frameworks */,
 				B3C26ADD2E1C3E8E00BF9002 /* FirebaseAuth in Frameworks */,
+				B3AE95F42E3002D9003677FA /* Translation.framework in Frameworks */,
 				B31222072E1E037D00657BB5 /* GoogleSignInSwift in Frameworks */,
 				B3C26AE52E1C3E8E00BF9002 /* FirebaseFirestoreCombine-Community in Frameworks */,
 				B3C26ADF2E1C3E8E00BF9002 /* FirebaseAuthCombine-Community in Frameworks */,
@@ -104,12 +107,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		B3AE95F22E3002C6003677FA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B3AE95F32E3002D9003677FA /* Translation.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		B3C26A432E1C38D400BF9002 = {
 			isa = PBXGroup;
 			children = (
 				B3C26A4E2E1C38D400BF9002 /* Noota */,
 				B3C26A5F2E1C38D600BF9002 /* NootaTests */,
 				B3C26A692E1C38D600BF9002 /* NootaUITests */,
+				B3AE95F22E3002C6003677FA /* Frameworks */,
 				B3C26A4D2E1C38D400BF9002 /* Products */,
 			);
 			sourceTree = "<group>";

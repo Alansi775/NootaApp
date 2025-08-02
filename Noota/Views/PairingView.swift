@@ -1,15 +1,24 @@
-// Noota/Views/PairingView.swift
 import SwiftUI
+import Combine
 
 struct PairingView: View {
-    @EnvironmentObject var appRootManager: AppRootManager // للتنقل
+    @EnvironmentObject var appRootManager: AppRootManager
     @ObservedObject var viewModel: PairingViewModel
 
+    @EnvironmentObject var speechManager: SpeechManager
+    @EnvironmentObject var translationService: TranslationService
+    @EnvironmentObject var textToSpeechService: TextToSpeechService
+
     @State private var showingQRScanner = false
-    @State private var scannedRoomID: String?
+    @State private var showingScannerErrorAlert = false
+    @State private var scannerErrorMessage: String = ""
+
+    private var coordinator: Coordinator {
+        Coordinator(parent: self)
+    }
 
     var body: some View {
-        NavigationView { // تأكد من وجود NavigationView للتنقل
+        NavigationView {
             VStack(spacing: 20) {
                 Spacer()
 
@@ -18,9 +27,10 @@ struct PairingView: View {
                     .fontWeight(.bold)
                     .padding(.bottom, 30)
 
-                // قسم إنشاء غرفة
                 Button(action: {
-                  //  viewModel.createNewRoom()
+                    Task {
+                        await viewModel.createNewRoom()
+                    }
                 }) {
                     Label("Create New Room", systemImage: "plus.circle.fill")
                         .font(.headline)
@@ -31,12 +41,12 @@ struct PairingView: View {
                         .cornerRadius(15)
                 }
                 .padding(.horizontal)
-                .disabled(viewModel.isLoading) // تعطيل الزر أثناء التحميل
+                .disabled(viewModel.isLoading)
 
                 if viewModel.isLoading && viewModel.roomID.isEmpty {
                     ProgressView("Creating Room...")
                         .padding()
-                } else if !viewModel.roomID.isEmpty {
+                } else if !viewModel.roomID.isEmpty && viewModel.currentRoom?.status == .pending {
                     VStack {
                         Text("Room ID: \(viewModel.roomID)")
                             .font(.title2)
@@ -45,15 +55,17 @@ struct PairingView: View {
                         if let qrImage = viewModel.qrCodeImage {
                             Image(uiImage: qrImage)
                                 .resizable()
-                                .interpolation(.none) // لمنع التمويه
+                                .interpolation(.none)
                                 .scaledToFit()
                                 .frame(width: 200, height: 200)
                                 .padding()
                         }
+                        Text("Waiting for opponent...")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
                     }
                 }
                 
-                // قسم الانضمام لغرفة
                 Divider()
                     .padding(.vertical, 20)
 
@@ -65,7 +77,9 @@ struct PairingView: View {
                     .disableAutocorrection(true)
 
                 Button(action: {
-                 //   viewModel.joinRoom(with: viewModel.roomID)
+                    Task {
+                        await viewModel.joinRoom(with: viewModel.roomID)
+                    }
                 }) {
                     Label("Join Room with ID", systemImage: "arrow.right.circle.fill")
                         .font(.headline)
@@ -78,9 +92,8 @@ struct PairingView: View {
                 .padding(.horizontal)
                 .disabled(viewModel.roomID.isEmpty || viewModel.isLoading)
 
-                // زر مسح QR Code
                 Button(action: {
-                    showingQRScanner = true // فتح شاشة الماسح الضوئي
+                    showingQRScanner = true
                 }) {
                     Label("Scan QR Code", systemImage: "qrcode.viewfinder")
                         .font(.headline)
@@ -103,75 +116,98 @@ struct PairingView: View {
                 }
             }
             .navigationTitle("")
-            .navigationBarHidden(true) // إخفاء Navigation Bar الافتراضي
-            .onChange(of: viewModel.currentRoom) { newRoom in
-                // الانتقال إلى شاشة المحادثة الجديدة عند الانضمام أو الإنشاء بنجاح
-                if let room = newRoom, room.id != nil {
-                    // هنا ننتقل إلى RoomView
-                    // يجب أن يكون لديك `NavigationLink` أو `NavigationStack` في SwiftUI 3+
-                    // أو استخدم EnvironmentObject للتنقل إذا كنت تدير تدفق التطبيق مركزياً.
-                    Logger.log("Navigating to RoomView for room ID: \(room.id!)", level: .info)
-                    // في الوقت الحالي، سنقوم بتحديث appRootManager ليذهب إلى شاشة الغرفة
-                    appRootManager.currentView = .room(roomID: room.id!, currentUser: viewModel.authService.user!)
-                    
-                    // إظهار التنبيه (يمكنك استخدام SwiftUI Alert)
-                    // على سبيل المثال:
-                    // self.showingJoinSuccessAlert = true
+            .navigationBarHidden(true)
+
+            .navigationDestination(isPresented: $viewModel.showConversationView) {
+                if let room = viewModel.currentRoom,
+                   let currentUser = viewModel.authService.user,
+                   let opponentUser = viewModel.opponentUser {
+                                        
+                    ConversationView(viewModel: ConversationViewModel(
+                        room: room,
+                        currentUser: currentUser,
+                        opponentUser: opponentUser,
+                        firestoreService: viewModel.firestoreService,
+                        authService: viewModel.authService,
+                        speechManager: speechManager,
+                        translationService: translationService,
+                        textToSpeechService: textToSpeechService
+                    ))
+                    .onAppear {
+                        // 🚨 هذا هو المكان الصحيح لـ Logger.log 🚨
+                        Logger.log("Navigating to ConversationView for room ID: \(room.id ?? "N/A").", level: .info)
+                        Logger.log("ConversationView did appear from navigationDestination.", level: .info)
+                    }
+                    .onDisappear {
+                        Logger.log("ConversationView did disappear. Resetting pairing view state.", level: .info)
+                        viewModel.resetPairingState()
+                    }
+
+                } else {
+                    Text("Error: Required data for conversation is missing.")
+                        .foregroundColor(.red)
+                        .onAppear {
+                            Logger.log("Error: Conversation data missing when trying to navigate.", level: .error)
+                        }
                 }
             }
+            
             .sheet(isPresented: $showingQRScanner) {
-                // عرض شاشة الماسح الضوئي
-             //   QRScannerSheet(delegate: self) // تمرير الـ delegate
-                  //  .edgesIgnoringSafeArea(.all)
+                QRCodeScannerView(delegate: coordinator)
             }
+            .alert("Scanner Error", isPresented: $showingScannerErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text(scannerErrorMessage)
+            }
+        }
+    }
+
+    class Coordinator: NSObject, QRCodeScannerDelegate {
+        var parent: PairingView
+
+        init(parent: PairingView) {
+            self.parent = parent
+        }
+
+        func didScanQRCode(result: String) {
+            parent.showingQRScanner = false
+            parent.viewModel.roomID = result
+            Logger.log("QR Code scanned: \(result). Attempting to join room.", level: .info)
+            Task { @MainActor in
+                await parent.viewModel.joinRoom(with: result)
+            }
+        }
+
+        func scannerDidFail(error: Error) {
+            parent.showingQRScanner = false
+            parent.scannerErrorMessage = error.localizedDescription
+            parent.showingScannerErrorAlert = true
+            Logger.log("QR Scanner failed: \(error.localizedDescription)", level: .error)
+            parent.viewModel.errorMessage = "QR Scanner Failed: \(error.localizedDescription)"
+        }
+
+        func scannerDidCancel() {
+            parent.showingQRScanner = false
+            Logger.log("QR Scanner cancelled.", level: .info)
         }
     }
 }
 
-// غلاف بسيط لـ QRCodeScannerView ليعمل مع `sheet`
-struct QRScannerSheet: View {
-    weak var delegate: QRCodeScannerDelegate?
+struct PairingView_Previews: PreviewProvider {
+    static var previews: some View {
+        let mockAuthService = AuthService()
+        let mockFirestoreService = FirestoreService()
+        
+        mockAuthService.user = User(uid: "mockUid", email: "mock@example.com", username: "MockUser", preferredLanguageCode: "en-US")
+        
+        let mockViewModel = PairingViewModel(firestoreService: mockFirestoreService, authService: mockAuthService)
 
-    var body: some View {
-        QRCodeScannerView(delegate: delegate)
+        return PairingView(viewModel: mockViewModel)
+            .environmentObject(mockAuthService)
+            .environmentObject(mockFirestoreService)
+            .environmentObject(SpeechManager())
+            .environmentObject(TranslationService())
+            .environmentObject(TextToSpeechService())
     }
 }
-
-// تمديد لـ PairingView ليتوافق مع بروتوكول QRCodeScannerDelegate
-//extension PairingView: QRCodeScannerDelegate {
-//    func didScanQRCode(result: String) {
-//        // إغلاق شاشة الماسح الضوئي
-//        showingQRScanner = false
-//        // استخدام Room ID الممسوح للانضمام إلى الغرفة
-//        viewModel.roomID = result // تحديث roomID في ViewModel
-//        viewModel.joinRoom(with: result) // بدء عملية الانضمام
-//        Logger.log("QR Code scanned: \(result)", level: .info)
-//    }
-//
-//    func scannerDidFail(error: Error) {
-//        showingQRScanner = false
-//        viewModel.errorMessage = "QR Scanner Failed: \(error.localizedDescription)"
-//        Logger.log("QR Scanner failed: \(error.localizedDescription)", level: .error)
-//    }
-//
-//    func scannerDidCancel() {
-//        showingQRScanner = false
-//        Logger.log("QR Scanner cancelled.", level: .info)
-//    }
-//}
-
-// قد تحتاج AppRootManager لإدارة التنقل بين الشاشات الرئيسية
-// هذا مثال على كيفية تعريفها، وقد تحتاج لتكييفها مع بنية مشروعك
-
-
-// قم بتحديث User model إذا لم يكن موجودًا
-// للتأكد من أن به خاصية `id`
-/*
-struct User: Identifiable, Codable {
-    @DocumentID var id: String?
-    var uid: String // قد يكون هو نفسه الـ id
-    var email: String?
-    var displayName: String?
-    // ... أي خصائص أخرى للمستخدم
-}
-*/

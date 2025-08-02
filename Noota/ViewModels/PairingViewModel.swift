@@ -1,109 +1,78 @@
-// Noota/ViewModels/PairingViewModel.swift هذا
-
 import Foundation
 import Combine
-import FirebaseFirestore // تأكد من استيراد Firestore
-import UIKit // لـ UIImage
-import CoreImage // لإنشاء QR Code
-import CoreImage.CIFilterBuiltins // لـ CIFilter.qrCodeGenerator
+import FirebaseFirestore
+import UIKit
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 class PairingViewModel: ObservableObject {
-    // ... (احتفظ بالخصائص الموجودة لديك)
-    @Published var currentRoom: Room?// الغرفة الحالية التي تم إنشاؤها أو الانضمام إليها
-    @Published var roomID: String = "" // لتخزين Room ID
-    @Published var qrCodeImage: UIImage? // ✨ هذا هو المتغير الجديد أو الذي يجب أن يكون موجودًا
+    // MARK: - Published Properties
+
+    @Published var currentRoom: Room?
+    @Published var roomID: String = "" // This will now be directly set upon creation/join
+    @Published var qrCodeImage: UIImage?
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
     @Published var isDataFullyLoadedForConversation: Bool = false
     
-    
-    // ✨ جديد: خاصية للتحكم في الانتقال إلى شاشة المحادثة
     @Published var showConversationView: Bool = false
-    
-    // ✨ جديد: لتخزين بيانات المستخدم المقابل
     @Published var opponentUser: User?
     
-    // Services
-    private let firestoreService: FirestoreService
-    let authService: AuthService // تأكد أنها غير private
+    // MARK: - Services
+
+    let firestoreService: FirestoreService
+    let authService: AuthService
     
     private var cancellables = Set<AnyCancellable>()
+
+    // MARK: - Initialization
 
     init(firestoreService: FirestoreService, authService: AuthService) {
         self.firestoreService = firestoreService
         self.authService = authService
         
-        // ✨ أضف هذا الـ subscriber للاستماع للتغييرات في الغرفة من FirestoreService
+        // This sink reacts to changes in `currentFirestoreRoom` from FirestoreService.
+        // It's responsible for updating the ViewModel's state based on real-time database changes.
         firestoreService.$currentFirestoreRoom
-            .receive(on: DispatchQueue.main) // تأكد من تلقي التحديثات على الـ Main Thread
+            .receive(on: DispatchQueue.main) // Ensure UI updates on the main thread
             .sink { [weak self] room in
                 guard let self = self else { return }
                 
-                // دائماً قم بتحديث هذه الخصائص أولاً
+                // Update properties based on the observed room
                 self.currentRoom = room
                 self.roomID = room?.id ?? ""
                 
                 if let id = room?.id {
-                    self.generateQRCode(from: id)
+                    self.generateQRCode(from: id) // Generate QR code if room ID exists
                 } else {
-                    self.qrCodeImage = nil
+                    self.qrCodeImage = nil // Clear QR code if no room
                 }
                 
                 Task { @MainActor in
                     if let activeRoom = room, activeRoom.status == .active && activeRoom.participantUIDs.count == 2 {
-                        let currentUserID = self.authService.user?.id
-                        let opponentID = activeRoom.participantUIDs.first(where: { $0 != currentUserID })
-                        
-                        if let opponentID = opponentID {
-                            do {
-                                let opponent = try await self.firestoreService.fetchUser(uid: opponentID)
-                                self.opponentUser = opponent
-                                
-                                // ✨ الأهم: الآن فقط تأكد أن كل شيء جاهز للانتقال
-                                // يجب أن تنتقل فقط عندما تكون جميع البيانات الضرورية موجودة
-                                // تأكد أن self.currentRoom و self.opponentUser و self.authService.user كلها موجودة
-                                if self.currentRoom != nil && self.authService.user != nil && self.opponentUser != nil {
-                                    self.isDataFullyLoadedForConversation = true
-                                    self.showConversationView = true // الآن فقط قم بتعيين showConversationView
-                                    Logger.log("Room \(activeRoom.id ?? "N/A") is active, opponent fetched, and all data loaded. showConversationView set to true.", level: .info)
-                                } else {
-                                    // حالة غير متوقعة: البيانات ليست كاملة بعد الجلب
-                                    Logger.log("Conversation data not fully ready after fetching opponent.", level: .error)
-                                    self.isDataFullyLoadedForConversation = false
-                                    self.showConversationView = false
-                                }
-                                
-                            } catch {
-                                self.errorMessage = "Failed to fetch opponent user: \(error.localizedDescription)"
-                                Logger.log("Error fetching opponent user in sink: \(error.localizedDescription)", level: .error)
-                                self.opponentUser = nil
-                                self.isDataFullyLoadedForConversation = false
-                                self.showConversationView = false
-                            }
-                        } else {
-                            Logger.log("Room \(activeRoom.id ?? "N/A") is active, but opponent ID not found yet (currentUserID: \(currentUserID ?? "nil")).", level: .warning)
-                            self.opponentUser = nil
-                            self.isDataFullyLoadedForConversation = false
-                            self.showConversationView = false
-                        }
+                        Logger.log("Detected active room with 2 participants. Room ID: \(activeRoom.id ?? "N/A")", level: .info)
+                        await self.handleRoomActiveState(activeRoom: activeRoom)
                     } else {
-                        // الغرفة لم تعد موجودة أو لا تزال في حالة pending
-                        self.opponentUser = nil
                         self.isDataFullyLoadedForConversation = false
-                        self.showConversationView = false // تأكد أننا لسنا في شاشة المحادثة
+                        self.showConversationView = false
+                        self.opponentUser = nil
+                        
                         if room == nil {
                             Logger.log("currentFirestoreRoom became nil. showConversationView set to false.", level: .info)
                         } else {
                             Logger.log("Room \(room?.id ?? "N/A") status: \(room?.status.rawValue ?? "N/A"). Waiting for opponent or active status.", level: .info)
                         }
                     }
-                    self.isLoading = false
+                    // Do NOT set isLoading to false here, as it might be set by createNewRoom/joinRoom
+                    // isLoading should be managed by the specific async functions
                 }
             }
             .store(in: &self.cancellables)
     }
 
-    @MainActor // تأكد من أن هذه الدوال تعمل على الـ Main Actor
+    // MARK: - Room Management Functions
+
+    @MainActor
     func createNewRoom() async {
         guard let currentUser = authService.user else {
             errorMessage = "User not logged in."
@@ -111,23 +80,38 @@ class PairingViewModel: ObservableObject {
             return
         }
         
-        isLoading = true
+        isLoading = true // Start loading state
         errorMessage = nil
 
+        // Create a new Room object with initial pending status
+        // The ID will be assigned by FirestoreService
         let newRoom = Room(hostUserID: currentUser.id!, participantUIDs: [currentUser.id!], status: .pending)
         
         do {
-            _ = try await firestoreService.createRoom(room: newRoom)
-            // currentRoom و roomID و qrCodeImage سيتم تحديثها تلقائياً عن طريق الـ subscriber
-            Logger.log("Room creation process started. Room ID: \(newRoom.id ?? "N/A")", level: .info)
+            // Call createRoom on FirestoreService.
+            // Assuming this function now returns the created Room object *with its Firestore ID*.
+            let createdRoom = try await firestoreService.createRoom(room: newRoom)
+            
+            // Immediately update the published properties in the ViewModel
+            // This ensures the UI updates right away with the new room's info
+            self.currentRoom = createdRoom
+            self.roomID = createdRoom.id ?? ""
+            self.generateQRCode(from: self.roomID) // Generate QR for the newly created room ID
+            
+            Logger.log("Room created successfully with ID: \(createdRoom.id ?? "N/A")", level: .info)
+            
         } catch {
             errorMessage = "Failed to create room: \(error.localizedDescription)"
-            isLoading = false
             Logger.log("Error creating room: \(error.localizedDescription)", level: .error)
+            // It's important to set currentRoom/roomID/qrCodeImage to nil if creation fails
+            self.currentRoom = nil
+            self.roomID = ""
+            self.qrCodeImage = nil
         }
+        isLoading = false // End loading state
     }
 
-    @MainActor // تأكد من أن هذه الدوال تعمل على الـ Main Actor
+    @MainActor
     func joinRoom(with id: String) async {
         guard let currentUser = authService.user else {
             errorMessage = "User not logged in."
@@ -141,46 +125,27 @@ class PairingViewModel: ObservableObject {
             return
         }
         
-        isLoading = true
+        isLoading = true // Start loading state
         errorMessage = nil
         
         do {
-            _ = try await firestoreService.joinRoom(roomID: id, participantUserID: currentUser.id!)
-            // currentRoom سيتم تحديثها تلقائياً عن طريق الـ subscriber
+            // Call joinRoom on FirestoreService
+            try await firestoreService.joinRoom(roomID: id, participantUserID: currentUser.id!)
             Logger.log("Room join process started for ID: \(id)", level: .info)
+            
+            // The `firestoreService.$currentFirestoreRoom` sink will now handle updating
+            // `self.currentRoom`, `self.roomID`, and `self.qrCodeImage` once Firestore confirms the join.
+            
         } catch {
             errorMessage = "Failed to join room: \(error.localizedDescription)"
-            isLoading = false
             Logger.log("Error joining room: \(error.localizedDescription)", level: .error)
+            // No need to clear currentRoom/roomID/qrCodeImage here, as the sink
+            // should correctly update if the join fails (room becomes nil or
+            // remains unchanged in FirestoreService).
         }
+        isLoading = false // End loading state
     }
     
-    // ✨ دالة جديدة: لجلب بيانات المستخدم المقابل
-    @MainActor
-    func fetchOpponentUser(for room: Room) async {
-        guard let currentUserID = authService.user?.id else {
-            opponentUser = nil
-            return
-        }
-        
-        let opponentUID = room.participantUIDs.first(where: { $0 != currentUserID })
-        
-        guard let uid = opponentUID else {
-            opponentUser = nil
-            return
-        }
-        
-        do {
-            self.opponentUser = try await firestoreService.fetchUser(uid: uid)
-            Logger.log("Fetched opponent user: \(self.opponentUser?.email ?? "N/A")", level: .info)
-        } catch {
-            errorMessage = "Failed to fetch opponent user: \(error.localizedDescription)"
-            Logger.log("Error fetching opponent user: \(error.localizedDescription)", level: .error)
-            opponentUser = nil
-        }
-    }
-    
-    // ✨ دالة جديدة: لمغادرة الغرفة
     @MainActor
     func leaveCurrentRoom() async {
         guard let room = currentRoom, let userID = authService.user?.id else {
@@ -188,47 +153,93 @@ class PairingViewModel: ObservableObject {
             return
         }
         
-        isLoading = true
+        isLoading = true // Start loading state
         errorMessage = nil
         
         do {
             try await firestoreService.leaveRoom(roomID: room.id!, participantUserID: userID)
-            // الـ currentFirestoreRoom في Service ستصبح nil
-            // مما سيؤدي إلى تحديث currentRoom هنا إلى nil عبر الـ subscriber
-            // وبالتالي showConversationView ستصبح false
+            // The FirestoreService.$currentFirestoreRoom sink will handle setting currentRoom to nil
+            // and consequently updating roomID and qrCodeImage.
             Logger.log("Successfully initiated leave room for room ID: \(room.id ?? "N/A").", level: .info)
         } catch {
             errorMessage = "Failed to leave room: \(error.localizedDescription)"
             Logger.log("Error leaving room: \(error.localizedDescription)", level: .error)
         }
-        isLoading = false
+        isLoading = false // End loading state
     }
 
-    // ✨ دالة لإنشاء صورة QR Code من نص
+    // MARK: - Helper Functions
+
+    @MainActor
+    private func handleRoomActiveState(activeRoom: Room) async {
+        let currentUserID = self.authService.user?.id
+        let opponentID = activeRoom.participantUIDs.first(where: { $0 != currentUserID })
+        
+        guard let validOpponentID = opponentID else {
+            Logger.log("Room \(activeRoom.id ?? "N/A") is active, but opponent ID not found yet (currentUserID: \(currentUserID ?? "nil")). Retrying on next update.", level: .warning)
+            self.opponentUser = nil
+            self.isDataFullyLoadedForConversation = false
+            self.showConversationView = false
+            return
+        }
+        
+        do {
+            let opponent = try await self.firestoreService.fetchUser(uid: validOpponentID)
+            self.opponentUser = opponent
+            
+            if self.currentRoom != nil && self.authService.user != nil && self.opponentUser != nil {
+                self.isDataFullyLoadedForConversation = true
+                self.showConversationView = true
+                Logger.log("Room \(activeRoom.id ?? "N/A") is active, opponent fetched, and all data loaded. showConversationView set to true.", level: .info)
+            } else {
+                Logger.log("Conversation data not fully ready after fetching opponent. Some data is nil. Room: \(self.currentRoom != nil), CurrentUser: \(self.authService.user != nil), OpponentUser: \(self.opponentUser != nil)", level: .error)
+                self.isDataFullyLoadedForConversation = false
+                self.showConversationView = false
+            }
+            
+        } catch {
+            self.errorMessage = "Failed to fetch opponent user: \(error.localizedDescription)"
+            Logger.log("Error fetching opponent user in handleRoomActiveState: \(error.localizedDescription)", level: .error)
+            self.opponentUser = nil
+            self.isDataFullyLoadedForConversation = false
+            self.showConversationView = false
+        }
+    }
+
+    // This function generates the QR code.
+    // It is called by the `currentFirestoreRoom` sink and directly by `createNewRoom`.
     func generateQRCode(from string: String) {
         let filter = CIFilter.qrCodeGenerator()
         let data = Data(string.utf8)
         filter.setValue(data, forKey: "inputMessage")
         
         if let outputImage = filter.outputImage {
-            // قم بتوسيع الصورة قليلاً لتحسين الجودة
-            let scaleX = 200 / outputImage.extent.size.width
-            let scaleY = 200 / outputImage.extent.size.height
-            let transformedImage = outputImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+            // Scale up the image for better resolution
+            let transform = CGAffineTransform(scaleX: 10, y: 10) // Scale factor for better quality
+            let scaledCIImage = outputImage.transformed(by: transform)
             
-            if let cgImage = CIContext().createCGImage(transformedImage, from: transformedImage.extent) {
+            let context = CIContext()
+            if let cgImage = context.createCGImage(scaledCIImage, from: scaledCIImage.extent) {
+                // Ensure this assignment happens on the main thread if called from a background context.
+                // Since this is called from `sink` which uses `receive(on: .main)` and `createNewRoom`
+                // is `@MainActor`, it should be fine.
                 self.qrCodeImage = UIImage(cgImage: cgImage)
                 return
             }
         }
-        self.qrCodeImage = nil // في حالة الفشل
+        self.qrCodeImage = nil
     }
     
-    // دالة لتحديد اسم المستخدم المقابل في الغرفة - تم استبدالها بـ `opponentUser`
-    // هذه الدالة لم تعد ضرورية بنفس الشكل، سنعتمد على `opponentUser` مباشرة
-    // func getOpponentUserName(for room: Room) -> String? { ... }
-    
-    // 💡 تم إزالة دالة async المساعدة وامتداد AnyPublisher.async()
-    // لأننا الآن نستخدم async/await مباشرة في FirestoreService
-    // func async<T>(from publisher: AnyPublisher<T, Error>) async throws -> T { ... }
+    @MainActor
+    func resetPairingState() {
+        self.currentRoom = nil
+        self.roomID = ""
+        self.qrCodeImage = nil
+        self.errorMessage = nil
+        self.isLoading = false
+        self.isDataFullyLoadedForConversation = false
+        self.showConversationView = false
+        self.opponentUser = nil
+        Logger.log("PairingViewModel state reset.", level: .info)
+    }
 }

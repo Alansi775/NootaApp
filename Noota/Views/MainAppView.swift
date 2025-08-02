@@ -5,17 +5,19 @@ import Combine
 struct MainAppView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var firestoreService: FirestoreService
+    // 💡 أضف EnvironmentObjects للخدمات الجديدة هنا
+    @EnvironmentObject var speechManager: SpeechManager // افتراضًا أنها EnvironmentObject
+    @EnvironmentObject var translationService: TranslationService // افتراضًا أنها EnvironmentObject
+    @EnvironmentObject var textToSpeechService: TextToSpeechService // افتراضًا أنها EnvironmentObject
+
     @StateObject var pairingVM: PairingViewModel
 
     @State private var joinRoomID: String = ""
     
     @State private var showAlert: Bool = false
-    @State private var alertMessage: String = ""
-
+    @State private var alertMessage: String = String()
     @State private var showingQRScanner = false
-    // @State private var showRoomView: Bool = false // تم نقلها إلى PairingViewModel وهي الآن showConversationView
-    // @State private var opponentName: String? // تم نقلها إلى PairingViewModel وهي الآن opponentUser
-
+    
     // ✨ تهيئة الـ Coordinator كـ State Property
     @State private var coordinator: MainAppViewCoordinator?
     
@@ -34,24 +36,23 @@ struct MainAppView: View {
                     Task { @MainActor in
                         do {
                             try await self.pairingVM.joinRoom(with: scannedResult)
-                            // عند النجاح، سيتم تغيير showConversationView في PairingViewModel، وسيتم التعامل مع الانتقال تلقائيا
                         } catch {
                             self.alertMessage = "Failed to join room from QR: \(error.localizedDescription)"
                             self.showAlert = true
                         }
-                        self.showingQRScanner = false // إغلاق الـ sheet بعد العملية
+                        self.showingQRScanner = false
                     }
                 },
                 scannerDidFail: { error in
                     Task { @MainActor in
                         self.alertMessage = "QR Scanner Failed: \(error.localizedDescription)"
                         self.showAlert = true
-                        self.showingQRScanner = false // إغلاق الـ sheet
+                        self.showingQRScanner = false
                     }
                 },
                 scannerDidCancel: {
                     Task { @MainActor in
-                        self.showingQRScanner = false // إغلاق الـ sheet
+                        self.showingQRScanner = false
                     }
                 }
             )
@@ -59,160 +60,165 @@ struct MainAppView: View {
         }
     }
 
+    // MARK: - Sub-views (أجزاء View مستخرجة لتبسيط الـ body)
+
+    private var welcomeSection: some View {
+        VStack {
+            Text("Welcome")
+                .font(.system(size: 38, weight: .light, design: .default))
+                .foregroundColor(.white.opacity(0.8))
+
+            Text(authService.user?.firstName ?? authService.user?.email ?? "User")
+                .font(.system(size: 48, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.vertical, 35)
+        .padding(.horizontal, 25)
+        .background(
+            RoundedRectangle(cornerRadius: 35)
+                .fill(Color.black.opacity(0.3))
+                .shadow(color: .black.opacity(0.4), radius: 18, x: 0, y: 12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 35)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+        )
+        .padding(.top, 40)
+        .padding(.horizontal, 20)
+    }
+
+    private var hostSessionSection: some View {
+        VStack(spacing: 15) {
+            Text("Host a New Session")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                Task {
+                    await pairingVM.createNewRoom()
+                }
+            } label: {
+                Label("Create Room", systemImage: "plus.circle.fill")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(LinearGradient(gradient: Gradient(colors: [Color.green, Color.teal]), startPoint: .leading, endPoint: .trailing))
+                    .cornerRadius(10)
+                    .shadow(radius: 5)
+            }
+
+            if let currentRoom = pairingVM.currentRoom, let roomID = currentRoom.id, !roomID.isEmpty {
+                VStack(spacing: 10) {
+                    Text("Your Room ID:")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                    Text("**\(roomID)**")
+                        .font(.title3)
+                        .textSelection(.enabled)
+                        .padding(8)
+                        .background(Color.yellow.opacity(0.2))
+                        .cornerRadius(8)
+
+                    if let qrImage = pairingVM.qrCodeImage {
+                        Image(uiImage: qrImage)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .frame(width: 200, height: 200)
+                            .background(Color.white)
+                            .cornerRadius(10)
+                            .shadow(radius: 3)
+                    }
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(15)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.1))
+        .cornerRadius(20)
+        .shadow(radius: 10, x: 0, y: 5)
+        .padding(.horizontal)
+    }
+
+    private var joinSessionSection: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("Join an Existing Session")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+
+            HStack {
+                TextField("Enter Room ID", text: $joinRoomID)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(8)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(10)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                
+                Button {
+                    showingQRScanner = true
+                } label: {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .padding(12)
+                        .background(Color.purple.opacity(0.8))
+                        .cornerRadius(10)
+                        .shadow(radius: 3)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(pairingVM.isLoading)
+            }
+            .padding(.horizontal)
+
+            Button {
+                Task {
+                    await pairingVM.joinRoom(with: joinRoomID)
+                }
+            } label: {
+                Label("Join Room", systemImage: "person.2.fill")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(LinearGradient(gradient: Gradient(colors: [Color.orange, Color.red]), startPoint: .leading, endPoint: .trailing))
+                    .cornerRadius(10)
+                    .shadow(radius: 5)
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.1))
+        .cornerRadius(20)
+        .shadow(radius: 10, x: 0, y: 5)
+        .padding(.horizontal)
+    }
+
+    // MARK: - Main Body
+
     var body: some View {
-        // 💡 التغيير هنا: استخدام NavigationStack بدلاً من NavigationView
-        // هذا ضروري لكي يعمل navigationDestination بشكل صحيح
         NavigationStack {
             ScrollView {
                 VStack(spacing: 25) {
-                    VStack {
-                        Text("Welcome")
-                            .font(.system(size: 38, weight: .light, design: .default))
-                            .foregroundColor(.white.opacity(0.8))
-
-                        Text(authService.user?.firstName ?? authService.user?.email ?? "User")
-                            .font(.system(size: 48, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                    .padding(.vertical, 35)
-                    .padding(.horizontal, 25)
-                    .background(
-                        RoundedRectangle(cornerRadius: 35)
-                            .fill(Color.black.opacity(0.3))
-                            .shadow(color: .black.opacity(0.4), radius: 18, x: 0, y: 12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 35)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                            )
-                    )
-                    .padding(.top, 40)
-                    .padding(.horizontal, 20)
-
-                    // --- قسم إنشاء الغرفة ---
-                    VStack(spacing: 15) {
-                        Text("Host a New Session")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        Button {
-                            Task {
-                                await pairingVM.createNewRoom() // لا نحتاج try await هنا لأنها تتعامل مع أخطائها داخليًا
-                            }
-                        } label: {
-                            Label("Create Room", systemImage: "plus.circle.fill")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(LinearGradient(gradient: Gradient(colors: [Color.green, Color.teal]), startPoint: .leading, endPoint: .trailing))
-                                .cornerRadius(10)
-                                .shadow(radius: 5)
-                        }
-
-                        // عرض Room ID و QR Code إذا تم إنشاء غرفة
-                        if let currentRoom = pairingVM.currentRoom, let roomID = currentRoom.id, !roomID.isEmpty {
-                            VStack(spacing: 10) {
-                                Text("Your Room ID:")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray)
-                                Text("**\(roomID)**")
-                                    .font(.title3)
-                                    .textSelection(.enabled)
-                                    .padding(8)
-                                    .background(Color.yellow.opacity(0.2))
-                                    .cornerRadius(8)
-
-                                // عرض الـ QR Code هنا
-                                if let qrImage = pairingVM.qrCodeImage {
-                                    Image(uiImage: qrImage)
-                                        .resizable()
-                                        .interpolation(.none)
-                                        .scaledToFit()
-                                        .frame(width: 200, height: 200)
-                                        .background(Color.white)
-                                        .cornerRadius(10)
-                                        .shadow(radius: 3)
-                                }
-                            }
-                            .padding()
-                            .background(Color.secondary.opacity(0.1))
-                            .cornerRadius(15)
-                            .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .padding()
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(20)
-                    .shadow(radius: 10, x: 0, y: 5)
-                    .padding(.horizontal)
-
+                    welcomeSection
+                    hostSessionSection
                     Divider()
                         .padding(.vertical, 20)
                         .background(Color.clear)
-
-                    // --- قسم الانضمام لغرفة موجودة ---
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("Join an Existing Session")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
-
-                        HStack { // 💡 وضع TextField وزر QR في HStack
-                            TextField("Enter Room ID", text: $joinRoomID)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .padding(8)
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(10)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                            
-                            // 💡 زر مسح QR Code داخل مربع TextField
-                            Button {
-                                showingQRScanner = true // يفتح الـ sheet
-                            } label: {
-                                Image(systemName: "qrcode.viewfinder") // أيقونة فقط
-                                    .font(.title2)
-                                    .foregroundColor(.white) // لون الأيقونة
-                                    .padding(12) // لجعلها مربعة أكبر قليلاً
-                                    .background(Color.purple.opacity(0.8)) // لون خلفية الزر
-                                    .cornerRadius(10) // حواف دائرية
-                                    .shadow(radius: 3)
-                            }
-                            .buttonStyle(PlainButtonStyle()) // لإزالة التأثيرات الافتراضية
-                            .disabled(pairingVM.isLoading) // تعطيل الزر أثناء التحميل
-                        }
-                        .padding(.horizontal) // تطبيق padding على الـ HStack بأكمله
-
-                        Button {
-                            Task {
-                                await pairingVM.joinRoom(with: joinRoomID) // لا نحتاج try await هنا لأنها تتعامل مع أخطائها داخليًا
-                            }
-                        } label: {
-                            Label("Join Room", systemImage: "person.2.fill")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(LinearGradient(gradient: Gradient(colors: [Color.orange, Color.red]), startPoint: .leading, endPoint: .trailing))
-                                .cornerRadius(10)
-                                .shadow(radius: 5)
-                        }
-                    }
-                    .padding()
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(20)
-                    .shadow(radius: 10, x: 0, y: 5)
-                    .padding(.horizontal)
-
+                    joinSessionSection
                     Spacer()
 
                     Button("Sign Out") {
-                        Task { @MainActor in // تأكد من تشغيلها على MainActor
+                        Task { @MainActor in
                             do {
                                 try authService.signOut()
                                 Logger.log("User signed out.", level: .info)
@@ -237,34 +243,36 @@ struct MainAppView: View {
                 Alert(title: Text("Error"), message: Text(alertMessage), dismissButton: .default(Text("OK")))
             }
             
-            // --- ✨ أضف هذا الجزء الجديد هنا (الـ sheet الخاص بماسح الـ QR) ---
             .sheet(isPresented: $showingQRScanner) {
-                // نستخدم هنا QRCodeScannerView الذي قمت بإنشائه،
-                // ونمرر له الـ coordinator كـ delegate ليتلقى نتائج المسح
-                if let coordinator = coordinator { // نتأكد أن الـ coordinator تم تهيئته
+                if let coordinator = coordinator {
                     QRCodeScannerView(delegate: coordinator)
-                        // من الجيد دائمًا تمرير EnvironmentObjects الضرورية إذا كان QRCodeScannerView يعتمد عليها
                         .environmentObject(authService)
                         .environmentObject(firestoreService)
                 } else {
-                    // رسالة خطأ احتياطية إذا لم يتم تهيئة الـ coordinator لسبب ما
                     Text("Error: QR Scanner initialization failed. Please restart the app.")
                         .onAppear {
                             self.alertMessage = "QR Scanner initialization error. Please restart the app."
                             self.showAlert = true
-                            self.showingQRScanner = false // إغلاق الـ sheet
+                            self.showingQRScanner = false
                         }
                 }
             }
             
-            // ✨ التعديل هنا: استخدام pairingVM.showConversationView
             .navigationDestination(isPresented: $pairingVM.showConversationView) {
                 if let room = pairingVM.currentRoom,
                    let currentUser = authService.user,
                    let opponentUser = pairingVM.opponentUser {
-
-                    // ✨ التعديل هنا: إنشاء و تمرير ConversationViewModel
-                    ConversationView(viewModel: ConversationViewModel(room: room, currentUser: currentUser, opponentUser: opponentUser, firestoreService: firestoreService))
+                    // 🚨 السطر الذي يحتاج للتعديل
+                    ConversationView(viewModel: ConversationViewModel(
+                        room: room,
+                        currentUser: currentUser,
+                        opponentUser: opponentUser,
+                        firestoreService: firestoreService,
+                        authService: authService, // 💡 أضف هذا
+                        speechManager: speechManager, // 💡 أضف هذا
+                        translationService: translationService, // 💡 أضف هذا
+                        textToSpeechService: textToSpeechService // 💡 أضف هذا
+                    ))
                         .onDisappear {
                             Logger.log("ConversationView disappeared.", level: .info)
                         }
@@ -275,14 +283,23 @@ struct MainAppView: View {
                 }
             }
         }
-        .onAppear(perform: setupCoordinator) // ✨ استدعاء setupCoordinator عند ظهور الـ View
+        .onAppear(perform: setupCoordinator)
     }
 }
 
+// MARK: - Previews
+
 struct MainAppView_Previews: PreviewProvider {
     static var previews: some View {
-        MainAppView(authService: AuthService(), firestoreService: FirestoreService())
-            .environmentObject(AuthService())
-            .environmentObject(FirestoreService())
+        // ✨ تأكد من تهيئة جميع EnvironmentObjects المطلوبة هنا أيضًا للـ Previews
+        MainAppView(
+            authService: AuthService(),
+            firestoreService: FirestoreService()
+        )
+        .environmentObject(AuthService())
+        .environmentObject(FirestoreService())
+        .environmentObject(SpeechManager()) // 💡 أضف هذا للـ Previews
+        .environmentObject(TranslationService()) // 💡 أضف هذا للـ Previews
+        .environmentObject(TextToSpeechService()) // 💡 أضف هذا للـ Previews
     }
 }

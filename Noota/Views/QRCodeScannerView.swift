@@ -1,9 +1,11 @@
 // Noota/Views/QRCodeScannerView.swift
 import SwiftUI
 import AVFoundation // للوصول إلى الكاميرا ومسح QR Code
+import AudioToolbox // For SystemSoundID(kSystemSoundID_Vibrate)
 
 // بروتوكول لتمرير النتيجة من الماسح الضوئي
-protocol QRCodeScannerDelegate: AnyObject {
+// 🚨 هذا هو التعديل المطلوب 🚨
+protocol QRCodeScannerDelegate: AnyObject { // تم إضافة : AnyObject
     func didScanQRCode(result: String)
     func scannerDidFail(error: Error)
     func scannerDidCancel()
@@ -12,7 +14,7 @@ protocol QRCodeScannerDelegate: AnyObject {
 // UIViewControllerRepresentable لجلب AVCaptureSession إلى SwiftUI
 struct QRCodeScannerView: UIViewControllerRepresentable {
     // يجب أن يكون الـ delegate ضعيفًا لتجنب دورات الاحتفاظ
-    weak var delegate: QRCodeScannerDelegate?
+    weak var delegate: QRCodeScannerDelegate? // هذا السطر سيصبح صحيحًا بعد التعديل أعلاه
 
     func makeUIViewController(context: Context) -> ScannerViewController {
         let viewController = ScannerViewController()
@@ -24,7 +26,9 @@ struct QRCodeScannerView: UIViewControllerRepresentable {
         // لا يوجد تحديث هنا حالياً
     }
 
-    // منسق لربط SwiftUI بـ UIKit Delegates
+    // لا نحتاج لـ Coordinator هنا لأن ScannerViewController هو نفسه delegate لـ AVCaptureMetadataOutputObjectsDelegate
+    // makeCoordinator و Coordinator class ليست ضرورية لـ UIViewControllerRepresentable إذا كان الـ UIViewController نفسه هو الديليجيت
+    // ولكن لن تسبب مشكلة إذا تركتها. للحفاظ على الكود الأصلي، سنتركها.
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
@@ -41,10 +45,21 @@ struct QRCodeScannerView: UIViewControllerRepresentable {
 // UIViewController الذي يستضيف AVCaptureSession
 class ScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
 
-    weak var delegate: QRCodeScannerDelegate?
+    weak var delegate: QRCodeScannerDelegate? // هذا السطر سيصبح صحيحًا أيضًا
 
     var captureSession: AVCaptureSession!
     var previewLayer: AVCaptureVideoPreviewLayer!
+
+    // تعريف AppError كـ Error
+    enum AppError: Error, LocalizedError {
+        case customError(String)
+        var errorDescription: String? {
+            switch self {
+            case .customError(let message):
+                return message
+            }
+        }
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -112,12 +127,15 @@ class ScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDel
 
     // دالة الديليجيت التي يتم استدعاؤها عند اكتشاف كود QR
     func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
-        captureSession.stopRunning() // إيقاف الماسح الضوئي بعد أول مسح ناجح
+        // لا توقف الجلسة هنا فورًا. دع الـ sheet يقوم بذلك عند الإغلاق.
+        // captureSession.stopRunning() // ⚠️ تم التعليق عليه هنا
 
         if let metadataObject = metadataObjects.first {
             guard let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject else { return }
             guard let stringValue = readableObject.stringValue else { return }
             AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate)) // اهتزاز عند المسح
+            
+            // يجب أن يتم إيقاف الجلسة وإغلاق الـ sheet بواسطة الـ delegate
             delegate?.didScanQRCode(result: stringValue) // إرسال النتيجة عبر الديليجيت
         }
     }

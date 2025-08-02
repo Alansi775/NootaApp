@@ -1,210 +1,402 @@
-// Noota/Managers/SpeechManager.swift
 import Foundation
 import Speech
-import AVFoundation
 import Combine
+import SwiftUI
 
-class SpeechManager: NSObject, ObservableObject {
-
-    // MARK: - Published Properties
-
+class SpeechManager: ObservableObject {
     @Published var isRecording = false
-    @Published var transcribedText = ""
-    @Published var errorMessage: String?
-    @Published var authorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
-
-    // MARK: - Private Properties
-
-    // تم إصلاح الخطأ الثاني: تغيير 'let' إلى 'var' هنا
-    private var speechRecognizer: SFSpeechRecognizer?
+    @Published var recognizedText = ""
+    @Published var liveRecognizedText = ""
+    @Published var error: Error?
+    
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let audioEngine = AVAudioEngine() // Manages audio input
-    private var currentLocale: Locale // To hold the current locale for speech recognition
-
-    // MARK: - Initialization
-
-    override init() {
-        // Initialize with a default locale, e.g., English (US)
-        // You might want to make this configurable or based on user settings later
-        currentLocale = Locale(identifier: "en-US")
-        speechRecognizer = SFSpeechRecognizer(locale: currentLocale)
-        super.init()
-        speechRecognizer?.delegate = self // Set self as the delegate for SFSpeechRecognizer
-        requestAuthorization() // Request authorization on initialization
+    private let audioEngine = AVAudioEngine()
+    
+    // ✅ نظام التسجيل المستمر
+    private var isContinuousMode = false
+    private var lastProcessedText = ""
+    private var pendingText = ""
+    private var currentLanguageCode = "en-US"
+    
+    // ✅ نظام إدارة الجمل الذكي
+    private var sentenceBuffer = ""
+    private var lastSentenceTime = Date()
+    private var processingTimer: Timer?
+    private let sentenceCompletionDelay: TimeInterval = 1.8 // وقت انتظار لإكمال الجملة
+    
+    // ✅ نظام كشف الجمل
+    private var wordCount = 0
+    private var hasRecentActivity = false
+    
+    // ✅ Subject لإرسال الجمل المكتملة
+    private let completedSentenceSubject = PassthroughSubject<String, Never>()
+    var completedSentencePublisher: AnyPublisher<String, Never> {
+        completedSentenceSubject.eraseToAnyPublisher()
     }
-
-    // MARK: - Authorization
-
+    
+    init() {
+        requestAuthorization()
+    }
+    
     func requestAuthorization() {
         SFSpeechRecognizer.requestAuthorization { authStatus in
-            // Move to the main queue to update UI-related properties
             DispatchQueue.main.async {
-                self.authorizationStatus = authStatus
                 switch authStatus {
                 case .authorized:
                     Logger.log("Speech recognition authorization granted.", level: .info)
-                    self.errorMessage = nil
-                case .denied:
-                    self.errorMessage = "User denied speech recognition authorization."
-                    Logger.log(self.errorMessage!, level: .error)
-                case .restricted:
-                    self.errorMessage = "Speech recognition restricted on this device."
-                    Logger.log(self.errorMessage!, level: .error)
-                case .notDetermined:
-                    self.errorMessage = "Speech recognition authorization not determined."
-                    Logger.log(self.errorMessage!, level: .warning)
+                case .denied, .restricted, .notDetermined:
+                    self.error = NSError(domain: "SpeechManagerError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Speech recognition authorization denied."])
+                    Logger.log("Speech recognition authorization failed.", level: .error)
                 @unknown default:
-                    self.errorMessage = "Unknown speech recognition authorization status."
-                    Logger.log(self.errorMessage!, level: .error)
+                    self.error = NSError(domain: "SpeechManagerError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unknown authorization status."])
+                    Logger.log("Unknown speech recognition authorization status.", level: .error)
                 }
             }
         }
     }
-
-    // MARK: - Speech Recognition Control
-
-    func startRecording() {
-        guard authorizationStatus == .authorized else {
-            errorMessage = "Speech recognition not authorized. Please enable it in Settings."
-            Logger.log(errorMessage!, level: .error)
+    
+    // ✅ بدء التسجيل المستمر (ضغطة واحدة فقط)
+    func startContinuousRecording(languageCode: String) {
+        // ✅ إذا كان التسجيل المستمر نشطاً، تجاهل الطلب
+        guard !isContinuousMode else {
+            Logger.log("Continuous recording already active. Ignoring request.", level: .info)
             return
         }
-
-        // Stop any ongoing tasks or engine sessions
-        stopRecording()
-
-        // Configure audio session
-        let audioSession = AVAudioSession.sharedInstance()
+        
+        guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
+            requestAuthorization()
+            return
+        }
+        
         do {
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            isContinuousMode = true
+            currentLanguageCode = languageCode
+            resetState()
+            
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playAndRecord, mode: .measurement, options: .duckOthers)
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            
+            startRecognitionSession()
+            
+            Logger.log("Continuous speech recording started for language: \(languageCode).", level: .info)
+            
         } catch {
-            errorMessage = "Failed to configure audio session: \(error.localizedDescription)"
-            // تم إصلاح الخطأ الأول: تحديد مستوى LogLevel بشكل صريح
-            Logger.log(errorMessage!, level: .error)
-            return
+            self.error = error
+            isContinuousMode = false
+            Logger.log("Failed to start continuous recording: \(error.localizedDescription)", level: .error)
         }
-
-        // Create a new recognition request
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        recognitionRequest?.shouldReportPartialResults = true // Get results as they are recognized
-
-        // Ensure we have a speech recognizer and recognition request
-        guard let speechRecognizer = speechRecognizer else {
-            errorMessage = "Speech recognizer is not available for the current locale."
-            Logger.log(errorMessage!, level: .error)
-            return
-        }
-        guard let recognitionRequest = recognitionRequest else {
-            errorMessage = "Unable to create speech recognition request."
-            Logger.log(errorMessage!, level: .error)
-            return
-        }
-
-        // Start the recognition task
-        recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
-            guard let self = self else { return }
-
-            var isFinal = false
-
-            if let result = result {
-                self.transcribedText = result.bestTranscription.formattedString
-                isFinal = result.isFinal
-                Logger.log("Transcribing: \(self.transcribedText)", level: .debug)
+    }
+    
+    // ✅ بدء جلسة التعرف على الكلام
+    private func startRecognitionSession() {
+        guard isContinuousMode else { return }
+        
+        // ✅ إيقاف الجلسة السابقة إذا كانت موجودة
+        stopCurrentRecognitionSession()
+        
+        do {
+            isRecording = true
+            
+            let recognizer = SFSpeechRecognizer(locale: Locale(identifier: currentLanguageCode))
+            
+            recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+            recognitionRequest?.shouldReportPartialResults = true
+            
+            let inputNode = audioEngine.inputNode
+            let recordingFormat = inputNode.outputFormat(forBus: 0)
+            
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, when in
+                self?.recognitionRequest?.append(buffer)
             }
-
-            if error != nil || isFinal {
-                // Stop the audio engine if there's an error or if recognition is final
-                self.audioEngine.stop()
-                self.audioEngine.inputNode.removeTap(onBus: 0)
-                self.recognitionRequest = nil
-                self.recognitionTask = nil
-                self.isRecording = false
-
-                if let error = error {
-                    self.errorMessage = "Speech recognition error: \(error.localizedDescription)"
-                    Logger.log(self.errorMessage!, level: .error)
+            
+            if !audioEngine.isRunning {
+                audioEngine.prepare()
+                try audioEngine.start()
+            }
+            
+            recognitionTask = recognizer?.recognitionTask(with: recognitionRequest!) { [weak self] result, error in
+                guard let self = self else { return }
+                
+                DispatchQueue.main.async {
+                    self.handleContinuousRecognitionResult(result: result, error: error)
+                }
+            }
+            
+        } catch {
+            self.error = error
+            Logger.log("Failed to start recognition session: \(error.localizedDescription)", level: .error)
+            
+            // ✅ إعادة المحاولة بعد ثانيتين
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if self.isContinuousMode {
+                    self.restartRecognitionSession()
                 }
             }
         }
-
-        // Configure the audio engine for input
-        let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            self.recognitionRequest?.append(buffer) // Append audio to the recognition request
+    }
+    
+    // ✅ معالجة نتائج التعرف المستمر
+    private func handleContinuousRecognitionResult(result: SFSpeechRecognitionResult?, error: Error?) {
+        var shouldRestart = false
+        
+        if let result = result {
+            let newText = result.bestTranscription.formattedString
+            self.liveRecognizedText = newText
+            
+            // ✅ معالجة النص الجديد
+            if !newText.isEmpty {
+                hasRecentActivity = true
+                lastSentenceTime = Date()
+                processPendingText(newText)
+            }
+            
+            // ✅ إذا كانت النتيجة نهائية، أعد بدء الجلسة
+            if result.isFinal {
+                shouldRestart = true
+            }
         }
-
-        // Prepare and start the audio engine
-        audioEngine.prepare()
-        do {
-            try audioEngine.start()
-            isRecording = true
-            transcribedText = "" // Clear previous text
-            errorMessage = nil
-            Logger.log("Speech recording started.", level: .info)
-        } catch {
-            errorMessage = "Audio engine could not start: \(error.localizedDescription)"
-            Logger.log(errorMessage!, level: .error)
+        
+        // ✅ في حالة الخطأ، أعد بدء الجلسة
+        if let recognitionError = error {
+            Logger.log("Recognition error (will restart): \(recognitionError.localizedDescription)", level: .debug)
+            shouldRestart = true
+        }
+        
+        // ✅ إعادة بدء الجلسة إذا لزم الأمر
+        if shouldRestart && isContinuousMode {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.restartRecognitionSession()
+            }
         }
     }
-
-    func stopRecording() {
+    
+    // ✅ معالجة النص المعلق وكشف الجمل المكتملة
+    private func processPendingText(_ newText: String) {
+        let cleanedText = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // ✅ تجنب معالجة نفس النص مرة أخرى
+        guard cleanedText != lastProcessedText else { return }
+        
+        sentenceBuffer = cleanedText
+        
+        // ✅ إعادة ضبط مؤقت المعالجة
+        resetProcessingTimer()
+        
+        // ✅ كشف الجمل المكتملة فوراً
+        if let completedSentence = extractCompletedSentence(from: cleanedText) {
+            sendCompletedSentence(completedSentence)
+        }
+    }
+    
+    // ✅ استخراج الجمل المكتملة
+    private func extractCompletedSentence(from text: String) -> String? {
+        let sentences = splitIntoSentences(text)
+        
+        // ✅ إذا كان لدينا أكثر من جملة، أرسل الجملة الأولى المكتملة
+        if sentences.count > 1 {
+            let firstSentence = sentences[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            if isCompleteSentence(firstSentence) && firstSentence != lastProcessedText {
+                return firstSentence
+            }
+        }
+        
+        // ✅ أو إذا كانت الجملة الحالية مكتملة بوضوح
+        if sentences.count == 1 {
+            let sentence = sentences[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            if isDefinitelyCompleteSentence(sentence) && sentence != lastProcessedText {
+                return sentence
+            }
+        }
+        
+        return nil
+    }
+    
+    // ✅ تقسيم النص إلى جمل
+    private func splitIntoSentences(_ text: String) -> [String] {
+        let sentenceEnders: Set<Character> = [".", "!", "?", "؟", ".", "！", "？"]
+        var sentences: [String] = []
+        var currentSentence = ""
+        
+        for char in text {
+            currentSentence.append(char)
+            
+            if sentenceEnders.contains(char) {
+                sentences.append(currentSentence)
+                currentSentence = ""
+            }
+        }
+        
+        if !currentSentence.isEmpty {
+            sentences.append(currentSentence)
+        }
+        
+        return sentences.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+    
+    // ✅ فحص إذا كانت الجملة مكتملة
+    private func isCompleteSentence(_ sentence: String) -> Bool {
+        let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalPunctuation: Set<Character> = [".", "!", "?", "؟", ".", "！", "？"]
+        
+        // ✅ جملة تنتهي بعلامة ترقيم نهائية
+        if let lastChar = trimmed.last, finalPunctuation.contains(lastChar) {
+            return trimmed.count > 5 // على الأقل 5 أحرف
+        }
+        
+        return false
+    }
+    
+    // ✅ فحص إذا كانت الجملة مكتملة بوضوح (حتى بدون علامات ترقيم)
+    private func isDefinitelyCompleteSentence(_ sentence: String) -> Bool {
+        let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = trimmed.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        
+        // ✅ جملة طويلة بما فيه الكفاية (أكثر من 8 كلمات)
+        if words.count > 8 {
+            return true
+        }
+        
+        // ✅ تحتوي على تعبيرات كاملة
+        let completeExpressions = ["السلام عليكم", "كيف الحال", "ان شاء الله", "الحمد لله", "بارك الله فيك"]
+        for expression in completeExpressions {
+            if trimmed.lowercased().contains(expression.lowercased()) && words.count >= 3 {
+                return true
+            }
+        }
+        
+        return false
+    }
+    
+    // ✅ إرسال الجملة المكتملة
+    private func sendCompletedSentence(_ sentence: String) {
+        let cleanSentence = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard !cleanSentence.isEmpty && cleanSentence != lastProcessedText else { return }
+        
+        lastProcessedText = cleanSentence
+        recognizedText = cleanSentence
+        
+        Logger.log("Completed sentence detected: '\(cleanSentence)'", level: .info)
+        
+        // ✅ إرسال الجملة عبر الـ Publisher
+        completedSentenceSubject.send(cleanSentence)
+        
+        // ✅ إعادة ضبط البافر
+        sentenceBuffer = ""
+        liveRecognizedText = ""
+    }
+    
+    // ✅ مؤقت معالجة الجمل المعلقة
+    private func resetProcessingTimer() {
+        processingTimer?.invalidate()
+        processingTimer = Timer.scheduledTimer(withTimeInterval: sentenceCompletionDelay, repeats: false) { [weak self] _ in
+            self?.processBufferedSentence()
+        }
+    }
+    
+    // ✅ معالجة الجملة المحفوظة في البافر
+    private func processBufferedSentence() {
+        guard !sentenceBuffer.isEmpty else { return }
+        
+        let timeSinceLastActivity = Date().timeIntervalSince(lastSentenceTime)
+        
+        // ✅ إذا مر وقت كافٍ من الصمت وهناك محتوى جيد
+        if timeSinceLastActivity >= sentenceCompletionDelay {
+            let cleanBuffer = sentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+            let words = cleanBuffer.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+            
+            // ✅ إرسال الجملة إذا كانت تحتوي على محتوى كافٍ
+            if words.count >= 3 && cleanBuffer != lastProcessedText {
+                sendCompletedSentence(cleanBuffer)
+            }
+        }
+    }
+    
+    // ✅ إعادة بدء جلسة التعرف
+    private func restartRecognitionSession() {
+        guard isContinuousMode else { return }
+        
+        Logger.log("Restarting recognition session...", level: .debug)
+        
+        stopCurrentRecognitionSession()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            guard self.isContinuousMode else { return }
+            self.startRecognitionSession()
+        }
+    }
+    
+    // ✅ إيقاف جلسة التعرف الحالية
+    private func stopCurrentRecognitionSession() {
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+        
+        if audioEngine.isRunning {
+            audioEngine.inputNode.removeTap(onBus: 0)
+        }
+        
+        isRecording = false
+    }
+    
+    // ✅ إيقاف التسجيل المستمر نهائياً
+    func stopContinuousRecording() {
+        guard isContinuousMode else { return }
+        
+        isContinuousMode = false
+        processingTimer?.invalidate()
+        processingTimer = nil
+        
+        stopCurrentRecognitionSession()
+        
         if audioEngine.isRunning {
             audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0) // Remove the tap to stop audio input
-            recognitionRequest?.endAudio() // Tell the recognition request that the audio input has finished
-            isRecording = false
-            Logger.log("Speech recording stopped.", level: .info)
         }
-        recognitionTask?.cancel() // Cancel the recognition task
+        
+        Logger.log("Continuous speech recording stopped.", level: .info)
+    }
+    
+    // ✅ إعادة ضبط الحالة
+    private func resetState() {
+        liveRecognizedText = ""
+        recognizedText = ""
+        lastProcessedText = ""
+        sentenceBuffer = ""
+        wordCount = 0
+        hasRecentActivity = false
+        lastSentenceTime = Date()
+        processingTimer?.invalidate()
+        processingTimer = nil
+    }
+    
+    // ✅ الدوال القديمة للتوافق (لكن تعيد توجيه للنظام الجديد)
+    func startRecording(languageCode: String) {
+        startContinuousRecording(languageCode: languageCode)
+    }
+    
+    func stopRecording() {
+        // ✅ في النظام المستمر، هذا لا يوقف التسجيل بل يرسل ما في البافر
+        if isContinuousMode && !sentenceBuffer.isEmpty {
+            processBufferedSentence()
+        }
+    }
+    
+    func reset() {
+        stopContinuousRecording()
+        resetState()
+        error = nil
+        Logger.log("SpeechManager state reset.", level: .info)
+    }
+    
+    deinit {
+        recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
-
-        // Deactivate audio session
-        do {
-            try AVAudioSession.sharedInstance().setActive(false)
-        } catch {
-            Logger.log("Failed to deactivate audio session: \(error.localizedDescription)", level: .error)
-        }
-    }
-
-    // MARK: - Language Configuration (Optional but Recommended)
-
-    func setLanguage(localeIdentifier: String) {
-        let newLocale = Locale(identifier: localeIdentifier)
-        if SFSpeechRecognizer.supportedLocales().contains(newLocale) {
-            self.currentLocale = newLocale
-            // إعادة تهيئة speechRecognizer باللغة الجديدة
-            speechRecognizer = SFSpeechRecognizer(locale: self.currentLocale) // هذا السطر أصبح يعمل الآن
-            speechRecognizer?.delegate = self
-            Logger.log("Speech recognition language set to: \(localeIdentifier)", level: .info)
-        } else {
-            errorMessage = "Language '\(localeIdentifier)' is not supported for speech recognition."
-            Logger.log(errorMessage!, level: .warning)
-        }
-    }
-
-    // MARK: - Cleanup (Important for deallocation)
-
-    deinit {
-        stopRecording() // Ensure recording is stopped and resources are released
+        processingTimer?.invalidate()
         Logger.log("SpeechManager deinitialized.", level: .info)
-    }
-}
-
-// MARK: - SFSpeechRecognizerDelegate
-
-extension SpeechManager: SFSpeechRecognizerDelegate {
-    // This delegate method is called when the availability of the speech recognizer changes.
-    func speechRecognizer(_ speechRecognizer: SFSpeechRecognizer, availabilityDidChange available: Bool) {
-        if available {
-            Logger.log("Speech recognizer is available.", level: .info)
-            errorMessage = nil // Clear error if it becomes available
-        } else {
-            errorMessage = "Speech recognition not currently available. Check internet connection or device settings."
-            Logger.log(errorMessage!, level: .warning)
-        }
     }
 }
