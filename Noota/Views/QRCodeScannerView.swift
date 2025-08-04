@@ -25,6 +25,7 @@ struct QRCodeScannerView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: ScannerViewController, context: Context) {
         // لا يوجد تحديث هنا حالياً
     }
+    
 
     // لا نحتاج لـ Coordinator هنا لأن ScannerViewController هو نفسه delegate لـ AVCaptureMetadataOutputObjectsDelegate
     // makeCoordinator و Coordinator class ليست ضرورية لـ UIViewControllerRepresentable إذا كان الـ UIViewController نفسه هو الديليجيت
@@ -38,6 +39,21 @@ struct QRCodeScannerView: UIViewControllerRepresentable {
 
         init(_ parent: QRCodeScannerView) {
             self.parent = parent
+        }
+    }
+}
+
+struct QRCodeScannerContainerView: View {
+    weak var delegate: (any QRCodeScannerDelegate)?
+
+    var body: some View {
+        ZStack {
+            // ✅ استخدام QRCodeScannerView هنا لأنها UIViewControllerRepresentable
+            QRCodeScannerView(delegate: delegate)
+                .edgesIgnoringSafeArea(.all)
+            
+            // ✅ طبقة الإطار والنص
+            QRCodeOverlayView()
         }
     }
 }
@@ -126,19 +142,24 @@ class ScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDel
     }
 
     // دالة الديليجيت التي يتم استدعاؤها عند اكتشاف كود QR
-    func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
-        // لا توقف الجلسة هنا فورًا. دع الـ sheet يقوم بذلك عند الإغلاق.
-        // captureSession.stopRunning() // ⚠️ تم التعليق عليه هنا
+    // دالة الديليجيت التي يتم استدعاؤها عند اكتشاف كود QR
+        func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+            // ✅ الخطوة 1: التحقق من وجود كود QR صالح
+            if let metadataObject = metadataObjects.first {
+                guard let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject else { return }
+                guard let stringValue = readableObject.stringValue else { return }
 
-        if let metadataObject = metadataObjects.first {
-            guard let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject else { return }
-            guard let stringValue = readableObject.stringValue else { return }
-            AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate)) // اهتزاز عند المسح
-            
-            // يجب أن يتم إيقاف الجلسة وإغلاق الـ sheet بواسطة الـ delegate
-            delegate?.didScanQRCode(result: stringValue) // إرسال النتيجة عبر الديليجيت
+                // ✅ الخطوة 2: إيقاف جلسة الكاميرا فورًا بعد المسح الأول
+                self.captureSession.stopRunning()
+                
+                // ✅ الخطوة 3: تشغيل الاهتزاز مرة واحدة فقط
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
+                
+                // ✅ الخطوة 4: إرسال النتيجة عبر الـ delegate
+                delegate?.didScanQRCode(result: stringValue)
+            }
         }
-    }
 
     // للتعامل مع التدوير
     override var prefersStatusBarHidden: Bool {
@@ -147,5 +168,25 @@ class ScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDel
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         .portrait
+    }
+}
+
+struct QRCodeOverlayView: View {
+    var body: some View {
+        ZStack {
+            // ✅ إطار مربع بسيط
+            RoundedRectangle(cornerRadius: 25)
+                .stroke(Color.white, lineWidth: 4)
+                .frame(width: 250, height: 250)
+            
+            // ✅ النص التوجيهي
+            Text("Align QR Code Here To Scan")
+                .font(.subheadline)
+                .foregroundColor(.white)
+                .padding()
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(10)
+                .offset(y: 180)
+        }
     }
 }

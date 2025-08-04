@@ -52,6 +52,24 @@ Noota is an innovative application that connects you with others through seamles
   6. Automatic Transition to Conversation Page
 </p>
 
+<p align="center">
+  <img src="screenshots/6.png" width="200" alt="Automatic Transition to Conversation Page">
+  <br>
+  7. Choosing Your Language That You Speak And Hear
+</p>
+
+<p align="center">
+  <img src="screenshots/7.png" width="200" alt="Automatic Transition to Conversation Page">
+  <br>
+  8. Saying "Hello How Are You" in English
+</p>
+
+<p align="center">
+  <img src="screenshots/8.png" width="200" alt="Automatic Transition to Conversation Page">
+  <br>
+  9. The Other User Hear You And Recive Your Speech In His Langauge That He Choosed Which Is In This Example "Arabic"
+</p>
+
 ---
 
 ### How It Works:
@@ -59,5 +77,7 @@ Noota is an innovative application that connects you with others through seamles
 1.  **Host:** Tap "Create Room" to generate a new room. You'll see your room's QR code and room ID.
 2.  **Joiner:** Use the "Scan QR Code" option to scan the code, or "Enter Room ID" to type it in manually.
 3.  **Instant Connection:** Once both parties have joined, the live voice conversation will begin automatically!
+4.  **Conversation:** Both Users Should Choose Thier Langauges And Then They Should Click The Speaker Butoon Once And They Starts Thier Conversation.
+5.  **Translation:** Each One Now Will Hear And Recive The Words Or Senteces In Thier Own Langauge In Real Time. The Translation Is Supported By AI Module.
 
 Noota makes live voice communication easier and faster than ever. Download now and start talking!

@@ -245,7 +245,7 @@ struct MainAppView: View {
             
             .sheet(isPresented: $showingQRScanner) {
                 if let coordinator = coordinator {
-                    QRCodeScannerView(delegate: coordinator)
+                    QRCodeScannerContainerView(delegate: coordinator)
                         .environmentObject(authService)
                         .environmentObject(firestoreService)
                 } else {
