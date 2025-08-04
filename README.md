@@ -1,83 +1,60 @@
-# Noota: Your App for Instant, Live Voice Conversations
+# Noota: Your App for Instant, AI-Powered Live Voice Translation
 
-Noota is an innovative application that connects you with others through seamless, live voice conversations. Whether you're looking for a quick way to chat with a friend or need a private space to discuss ideas with just one other person, Noota offers the perfect solution. Its simple design and user-friendly interface ensure a unique and hassle-free communication experience.
+**Noota** is an innovative voice communication app powered by cutting-edge AI models, allowing two people to speak different languages and still understand each other — in real-time. Whether you're chatting in Chinese while the other person listens in Spanish, or vice versa, Noota delivers translated audio instantly **in the original speaker’s voice and tone**.
+
+No need to learn a new language. Just speak your own — Noota handles the rest.
 
 ---
 
 ### Key Features:
 
+* **Live AI Voice Translation:** Speak in your native language, and the other person hears you instantly in theirs.
+* **Voice Cloning:** Maintains your natural tone and vocal style for more human-like conversations.
 * **Instant Room Creation:** Start a new voice conversation with a single tap.
-* **Quick Join via QR Code:** Share your room's QR code and let friends join you with a simple camera scan.
-* **Manual Room ID Entry:** Can't scan the code? Enter the room ID manually to join instantly.
-* **Secure Communication:** Enjoy your conversations in a private and reliable environment.
-* **Intuitive User Interface:** A clean and clear design that helps you focus on the conversation.
+* **Quick Join via QR Code:** Share your room’s QR code and let others join by scanning.
+* **Manual Room ID Entry:** Use the room ID if scanning isn’t possible.
+* **Private & Secure:** Conversations are peer-to-peer and encrypted.
+* **Under Active Development:** We’re continuously improving the AI and expanding language support.
 
 ---
 
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/0.png" width="200" alt="Login Page">
-  <br>
-  1. Login Page
+  <img src="screenshots/0.png" width="200" alt="Login Page"><br>1. Login Page
 </p>
-
 <p align="center">
-  <img src="screenshots/1.png" width="200" alt="Create Your Account Screen">
-  <br>
-  2. Create Your Account Screen
+  <img src="screenshots/1.png" width="200" alt="Create Your Account Screen"><br>2. Create Your Account Screen
 </p>
-
 <p align="center">
-  <img src="screenshots/2.png" width="200" alt="Login Error Notification">
-  <br>
-  3. Password or Email is Incorrect Notification
+  <img src="screenshots/2.png" width="200" alt="Login Error Notification"><br>3. Password or Email is Incorrect Notification
 </p>
-
 <p align="center">
-  <img src="screenshots/3.png" width="200" alt="Home Page">
-  <br>
-  4. Home Page
+  <img src="screenshots/3.png" width="200" alt="Home Page"><br>4. Home Page
 </p>
-
 <p align="center">
-  <img src="screenshots/4.png" width="200" alt="Create Room & QR Code Display">
-  <br>
-  5. Create New Room (QR Code & Room ID)
+  <img src="screenshots/4.png" width="200" alt="Create Room & QR Code Display"><br>5. Create New Room (QR Code & Room ID)
 </p>
-
 <p align="center">
-  <img src="screenshots/5.png" width="200" alt="Automatic Transition to Conversation Page">
-  <br>
-  6. Automatic Transition to Conversation Page
+  <img src="screenshots/5.png" width="200" alt="Conversation Page"><br>6. Automatic Transition to Conversation Page
 </p>
-
 <p align="center">
-  <img src="screenshots/6.png" width="200" alt="Automatic Transition to Conversation Page">
-  <br>
-  7. Choosing Your Language That You Speak And Hear
+  <img src="screenshots/6.png" width="200" alt="Language Selection"><br>7. Choosing Your Language
 </p>
-
 <p align="center">
-  <img src="screenshots/7.png" width="200" alt="Automatic Transition to Conversation Page">
-  <br>
-  8. Saying "Hello How Are You" in English
+  <img src="screenshots/7.png" width="200" alt="Saying Hello"><br>8. Saying "Hello How Are You" in English
 </p>
-
 <p align="center">
-  <img src="screenshots/8.png" width="200" alt="Automatic Transition to Conversation Page">
-  <br>
-  9. The Other User Hear You And Recive Your Speech In His Langauge That He Choosed Which Is In This Example "Arabic"
+  <img src="screenshots/8.png" width="200" alt="Received Translation"><br>9. Receiving speech in Arabic
 </p>
 
 ---
 
 ### How It Works:
 
-1.  **Host:** Tap "Create Room" to generate a new room. You'll see your room's QR code and room ID.
-2.  **Joiner:** Use the "Scan QR Code" option to scan the code, or "Enter Room ID" to type it in manually.
-3.  **Instant Connection:** Once both parties have joined, the live voice conversation will begin automatically!
-4.  **Conversation:** Both Users Should Choose Thier Langauges And Then They Should Click The Speaker Butoon Once And They Starts Thier Conversation.
-5.  **Translation:** Each One Now Will Hear And Recive The Words Or Senteces In Thier Own Langauge In Real Time. The Translation Is Supported By AI Module.
+1. **Host:** Tap "Create Room" to generate a room. You’ll get a QR code and room ID.
+2. **Joiner:** Scan the QR code or enter the room ID to join the conversation.
+3. **Talk Freely:** Start speaking in your language — the app translates and delivers your voice in the listener’s language instantly.
 
-Noota makes live voice communication easier and faster than ever. Download now and start talking!
+Noota makes multilingual communication natural, instant, and intelligent.  
+**Download now and start talking — no translator needed!**
