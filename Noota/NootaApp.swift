@@ -1,4 +1,5 @@
 // Noota/NootaApp.swift
+
 import SwiftUI
 import FirebaseCore
 import Firebase
@@ -10,8 +11,20 @@ struct NootaApp: App {
     @StateObject var authService = AuthService()
     @StateObject var firestoreService = FirestoreService()
     @StateObject var speechManager = SpeechManager()
-    @StateObject var translationService = TranslationService()
     @StateObject var textToSpeechService = TextToSpeechService()
+    
+    // ✅ 1. تهيئة GeminiService أولاً (خدمة مستقلة)
+    @StateObject var geminiService = GeminiService()
+    
+    // ✅ 2. تهيئة TranslationService معتمدًا على GeminiService
+    @StateObject var translationService: TranslationService
+
+    init() {
+        // ... (تكوين Firebase هنا) ...
+        
+        // ✅ ربط الترجمة بخدمة Gemini (مع إنشاء نسخة جديدة داخل init)
+        _translationService = StateObject(wrappedValue: TranslationService(geminiService: GeminiService()))
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -21,6 +34,7 @@ struct NootaApp: App {
                 .environmentObject(speechManager)
                 .environmentObject(translationService)
                 .environmentObject(textToSpeechService)
+                .environmentObject(geminiService)
         }
     }
 }

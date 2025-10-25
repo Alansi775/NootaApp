@@ -291,15 +291,34 @@ struct MainAppView: View {
 
 struct MainAppView_Previews: PreviewProvider {
     static var previews: some View {
-        // ✨ تأكد من تهيئة جميع EnvironmentObjects المطلوبة هنا أيضًا للـ Previews
+        // ✨ تهيئة الخدمات المطلوبة للمعاينات
+        let mockAuthService = AuthService()
+        let mockFirestoreService = FirestoreService()
+        let mockSpeechManager = SpeechManager()
+        let mockTextToSpeechService = TextToSpeechService()
+        
+        // ✅ 1. إنشاء كائن وهمي لـ GeminiService
+        let mockGeminiService = GeminiService()
+        
+        // ✅ 2. تهيئة TranslationService بتمرير الـ Mock Gemini Service
+        let mockTranslationService = TranslationService(geminiService: mockGeminiService)
+        
+        // 💡 تهيئة MainAppView بالخدمات
         MainAppView(
-            authService: AuthService(),
-            firestoreService: FirestoreService()
+            authService: mockAuthService,
+            firestoreService: mockFirestoreService
         )
-        .environmentObject(AuthService())
-        .environmentObject(FirestoreService())
-        .environmentObject(SpeechManager()) // 💡 أضف هذا للـ Previews
-        .environmentObject(TranslationService()) // 💡 أضف هذا للـ Previews
-        .environmentObject(TextToSpeechService()) // 💡 أضف هذا للـ Previews
+        // 💡 تمرير جميع الخدمات كـ EnvironmentObject
+        .environmentObject(mockAuthService)
+        .environmentObject(mockFirestoreService)
+        .environmentObject(mockSpeechManager)
+        
+        // ❌ استبدال السطر القديم بالخدمة الجديدة
+        .environmentObject(mockTranslationService)
+        
+        .environmentObject(mockTextToSpeechService)
+        
+        // ✅ لا تنس تمرير GeminiService
+        .environmentObject(mockGeminiService)
     }
 }

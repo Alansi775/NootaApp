@@ -147,7 +147,6 @@ class ConversationViewModel: ObservableObject {
             .sink { [weak self] error in
                 guard let self = self else { return }
                 
-                // ✅ في النظام المستمر، نسجل الخطأ لكن لا نوقف العملية
                 Logger.log("SpeechManager Warning: \(error.localizedDescription)", level: .warning)
                 
                 // ✅ لا نعرض رسائل خطأ للمستخدم في النظام المستمر
@@ -168,13 +167,17 @@ class ConversationViewModel: ObservableObject {
     private func addToMessageQueue(_ message: String) {
         let cleanMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
         
+        // **ملاحظة:** يجب أن تكون آلية اكتشاف الرسائل المكررة أقوى، ربما باستخدام توقيت مؤقت.
         guard !cleanMessage.isEmpty && !sentMessagesHistory.contains(cleanMessage) else {
             Logger.log("Skipping duplicate or empty message: '\(cleanMessage)'", level: .debug)
             return
         }
         
         messageQueue.append(cleanMessage)
+        // ✅ نستخدم هذا السجل المؤقت لمنع المعالجة المزدوجة لجملة واحدة
         sentMessagesHistory.insert(cleanMessage)
+        // ✅ تنظيف سجل الرسائل المرسلة بمرور الوقت لمنع الازدحام
+        if sentMessagesHistory.count > 50 { sentMessagesHistory.removeAll() }
         processMessageQueue()
     }
     
@@ -228,7 +231,6 @@ class ConversationViewModel: ObservableObject {
                     
                 case .failure(let error):
                     Logger.log("Error listening to room updates: \(error.localizedDescription)", level: .error)
-                    // ✅ لا نعرض أخطاء الشبكة في النظام المستمر
                     if !self.isContinuousMode {
                         self.errorMessage = ErrorAlert(message: "Failed to listen to room: \(error.localizedDescription)")
                     }
@@ -253,7 +255,6 @@ class ConversationViewModel: ObservableObject {
 
                 if let error = error {
                     Logger.log("Error getting messages: \(error.localizedDescription)", level: .error)
-                    // ✅ لا نعرض أخطاء الشبكة في النظام المستمر
                     if !self.isContinuousMode {
                         self.errorMessage = ErrorAlert(message: "Failed to load messages: \(error.localizedDescription)")
                     }
@@ -270,10 +271,15 @@ class ConversationViewModel: ObservableObject {
                         let message = try latestDocument.data(as: ChatMessage.self)
 
                         if message.senderUID != self.currentUser.uid {
-                            Logger.log("Received new message from opponent: \(message.text)", level: .info)
-                            self.displayedMessage = message.text
+                            // ✅ الرسالة موجهة إليّ، يجب أن تكون الترجمة هي النص الذي سأتلقاه
+                            let textToSpeak = message.translatedText ?? message.text
+                            
+                            Logger.log("Received new message from opponent: \(textToSpeak)", level: .info)
+                            self.displayedMessage = textToSpeak // ✅ لعرض الترجمة على الشاشة
                             self.connectionStatus = "Message received"
-                            self.textToSpeechService.speak(text: message.text, languageCode: message.originalLanguageCode)
+                            
+                            // ✅ استخدام لغة الترجمة المستهدفة للـ TTS
+                            self.textToSpeechService.speak(text: textToSpeak, languageCode: message.targetLanguageCode)
                             
                             // ✅ إعادة ضبط الحالة بعد قليل
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -282,8 +288,9 @@ class ConversationViewModel: ObservableObject {
                                 }
                             }
                         } else {
+                            // رسالتي أنا، تم إرسالها للتو
                             Logger.log("Received my own message: \(message.text)", level: .info)
-                            self.lastSentMessage = message.text
+                            self.lastSentMessage = message.originalText // ✅ عرض النص الأصلي الذي تحدثت به
                             self.totalMessagesSent += 1
                             self.connectionStatus = "Message sent"
                             self.displayedMessage = nil
@@ -324,6 +331,7 @@ class ConversationViewModel: ObservableObject {
     }
     
     @MainActor
+    // ⚠️ تم تغيير هذه الدالة لتقوم بالترجمة أولاً
     func sendOriginalMessage(text: String, languageCode: String) async {
         guard let roomID = room.id else {
             Logger.log("Failed to get roomID for sending message.", level: .error)
@@ -335,21 +343,48 @@ class ConversationViewModel: ObservableObject {
             return
         }
         
+        let targetLangCode = otherParticipantLanguageCode()
+        
+        // 1. الترجمة باستخدام TranslationService
+        self.speechStatusText = "Translating..."
+        Logger.log("Starting translation for: '\(text)' from \(languageCode) to \(targetLangCode)", level: .info)
+        
+        var translatedText: String? = nil
+        
+        do {
+            // ✅ استدعاء الترجمة عبر TranslationService (يجب أن تكون هذه الدالة موجودة)
+            translatedText = try await translationService.translate(
+                text: text,
+                sourceLanguage: languageCode, // 💡 تم تغيير from: إلى sourceLanguage:
+                targetLanguage: targetLangCode // 💡 تم تغيير to: إلى targetLanguage:
+            )
+            Logger.log("Translation complete: '\(translatedText ?? "N/A")'", level: .info)
+
+        } catch {
+            Logger.log("Translation failed: \(error.localizedDescription). Sending original text instead.", level: .error)
+            // إذا فشلت الترجمة، نرسل النص الأصلي
+            translatedText = text
+        }
+        
+        // 2. إعداد الرسالة (نرسل الترجمة في حقل .text والنص الأصلي في .originalText)
+        let messageText = translatedText ?? text
+
         let newMessage = ChatMessage(
             id: UUID().uuidString,
             senderUID: currentUser.uid,
-            text: text,
+            text: messageText, // ✅ هذا هو النص الذي سيتم عرضه للطرف الآخر/قراءته (الترجمة)
             originalLanguageCode: languageCode,
             timestamp: Date(),
-            originalText: text,
-            translatedText: nil,
-            targetLanguageCode: otherParticipantLanguageCode(),
+            originalText: text, // ✅ النص الأصلي للمرسل
+            translatedText: translatedText, // ✅ الترجمة (مفيدة للسجلات)
+            targetLanguageCode: targetLangCode, // ✅ لغة الترجمة
             senderPreferredVoiceGender: currentUser.preferredVoiceGender ?? VoiceGender.default.rawValue
         )
         
+        // 3. إرسال الرسالة
         do {
             try await firestoreService.addMessageToRoom(roomID: roomID, message: newMessage)
-            Logger.log("Final message sent to Firestore: \(text)", level: .info)
+            Logger.log("Final message (Original: \(text), Translated: \(messageText)) sent to Firestore.", level: .info)
             self.speechStatusText = "Message sent."
         } catch {
             Logger.log("Error sending message to Firestore: \(error.localizedDescription)", level: .error)
@@ -387,53 +422,50 @@ class ConversationViewModel: ObservableObject {
         Logger.log("✅ Successfully attempted to update participant language in Firestore (room doc) to: \(languageCode)", level: .info)
     }
     
-    // الكود الجديد والمُعدَّل
-        @MainActor
-        func leaveRoom() async {
-            Logger.log("Attempting to leave room: \(room.id ?? "N/A")", level: .info)
-            guard let roomID = room.id else {
-                Logger.log("Failed to leave room: Room ID is nil.", level: .error)
-                return
-            }
-
-            do {
-                // ✅ الآن، دالة leaveRoom في FirestoreService هي المسؤولة عن كل شيء
-                try await firestoreService.leaveRoom(roomID: roomID, participantUserID: currentUser.uid)
-                
-                Logger.log("User \(currentUser.uid) has successfully left and the room was processed.", level: .info)
-                
-                // ✅ إيقاف جميع عمليات الاستماع والتسجيل
-                onDisappear()
-
-            } catch {
-                Logger.log("Error leaving room: \(error.localizedDescription)", level: .error)
-                self.errorMessage = ErrorAlert(message: "Failed to leave conversation: \(error.localizedDescription)")
-            }
-        }
-    
     @MainActor
-    private func translateText(_ text: String, sourceLanguageCode: String, targetLanguageCode: String) async -> String? {
-        return nil
+    func leaveRoom() async {
+        Logger.log("Attempting to leave room: \(room.id ?? "N/A")", level: .info)
+        guard let roomID = room.id else {
+            Logger.log("Failed to leave room: Room ID is nil.", level: .error)
+            return
+        }
+
+        do {
+            try await firestoreService.leaveRoom(roomID: roomID, participantUserID: currentUser.uid)
+            Logger.log("User \(currentUser.uid) has successfully left and the room was processed.", level: .info)
+            onDisappear()
+
+        } catch {
+            Logger.log("Error leaving room: \(error.localizedDescription)", level: .error)
+            self.errorMessage = ErrorAlert(message: "Failed to leave conversation: \(error.localizedDescription)")
+        }
     }
+    
+    // ⚠️ تم حذف هذه الدالة
+    // @MainActor
+    // private func translateText(_ text: String, sourceLanguageCode: String, targetLanguageCode: String) async -> String? {
+    //     return nil
+    // }
 
     private func otherParticipantLanguageCode() -> String {
         if let opponentUID = room.participantUIDs.first(where: { $0 != currentUser.uid }),
            let opponentLang = room.participantLanguages?[opponentUID] {
             return opponentLang
         }
-        return selectedLanguage == "en-US" ? "ar-SA" : "en-US"
+        // قيمة افتراضية في حالة عدم وجود خصم أو لغة محددة (يجب أن يحدث هذا نادراً)
+        return opponentUser.preferredLanguageCode ?? "en-US"
     }
 }
 
-// تعريف ChatMessage و ErrorAlert
+// تعريف ChatMessage و ErrorAlert (كما هي لديك)
 struct ChatMessage: Identifiable, Codable, Equatable {
     @DocumentID var id: String?
     let senderUID: String
-    let text: String
+    let text: String // ✅ هذا هو نص الترجمة أو النص الأصلي في حالة الفشل
     let originalLanguageCode: String
     let timestamp: Date
     let originalText: String
-    let translatedText: String?
+    let translatedText: String? // ✅ الترجمة الفعلية
     let targetLanguageCode: String
     let senderPreferredVoiceGender: String
 }

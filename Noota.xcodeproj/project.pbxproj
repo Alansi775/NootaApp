@@ -16,6 +16,7 @@
 		B3C26AE32E1C3E8E00BF9002 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26AE22E1C3E8E00BF9002 /* FirebaseFirestore */; };
 		B3C26AE52E1C3E8E00BF9002 /* FirebaseFirestoreCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26AE42E1C3E8E00BF9002 /* FirebaseFirestoreCombine-Community */; };
 		B3C26AE72E1C3E8E00BF9002 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = B3C26AE62E1C3E8E00BF9002 /* FirebaseStorage */; };
+		B3C5BE032E9C168800FC036E /* GoogleGenerativeAI in Frameworks */ = {isa = PBXBuildFile; productRef = B3C5BE022E9C168800FC036E /* GoogleGenerativeAI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -83,6 +84,7 @@
 				B3C26ADD2E1C3E8E00BF9002 /* FirebaseAuth in Frameworks */,
 				B3AE95F42E3002D9003677FA /* Translation.framework in Frameworks */,
 				B31222072E1E037D00657BB5 /* GoogleSignInSwift in Frameworks */,
+				B3C5BE032E9C168800FC036E /* GoogleGenerativeAI in Frameworks */,
 				B3C26AE52E1C3E8E00BF9002 /* FirebaseFirestoreCombine-Community in Frameworks */,
 				B3C26ADF2E1C3E8E00BF9002 /* FirebaseAuthCombine-Community in Frameworks */,
 				B3C26AE72E1C3E8E00BF9002 /* FirebaseStorage in Frameworks */,
@@ -164,6 +166,7 @@
 				B3C26AE62E1C3E8E00BF9002 /* FirebaseStorage */,
 				B31222042E1E037D00657BB5 /* GoogleSignIn */,
 				B31222062E1E037D00657BB5 /* GoogleSignInSwift */,
+				B3C5BE022E9C168800FC036E /* GoogleGenerativeAI */,
 			);
 			productName = Noota;
 			productReference = B3C26A4C2E1C38D400BF9002 /* Noota.app */;
@@ -250,6 +253,7 @@
 			packageReferences = (
 				B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				B31222032E1E037D00657BB5 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				B3C5BE012E9C168800FC036E /* XCRemoteSwiftPackageReference "generative-ai-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B3C26A4D2E1C38D400BF9002 /* Products */;
@@ -644,6 +648,14 @@
 				minimumVersion = 11.15.0;
 			};
 		};
+		B3C5BE012E9C168800FC036E /* XCRemoteSwiftPackageReference "generative-ai-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/generative-ai-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.5.6;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -686,6 +698,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B3C26ADB2E1C3E8E00BF9002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		B3C5BE022E9C168800FC036E /* GoogleGenerativeAI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B3C5BE012E9C168800FC036E /* XCRemoteSwiftPackageReference "generative-ai-swift" */;
+			productName = GoogleGenerativeAI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -309,9 +309,18 @@ struct ConversationView_Previews: PreviewProvider {
         mockAuthService.user = mockCurrentUser
 
         let mockSpeechManager = SpeechManager()
-        let mockTranslationService = TranslationService()
+        
+        // ✅ 1. إنشاء كائن وهمي لـ GeminiService
+        let mockGeminiService = GeminiService()
+        
+        // ✅ 2. تهيئة TranslationService بتمرير الـ Mock Gemini Service
+        let mockTranslationService = TranslationService(geminiService: mockGeminiService)
+        
         let mockTextToSpeechService = TextToSpeechService()
 
+        // ⚠️ 3. يجب تحديث تهيئة ViewModel أيضًا إذا كانت تستخدم GeminiService،
+        // لكنها هنا تستخدم TranslationService و TranslationService هو الذي يستخدم Gemini.
+        // لذا، التهيئة هنا صحيحة (تستخدم mockTranslationService الذي تم إنشاؤه في الخطوة 2).
         let mockVM = ConversationViewModel(
             room: mockRoom,
             currentUser: mockCurrentUser,
@@ -319,7 +328,7 @@ struct ConversationView_Previews: PreviewProvider {
             firestoreService: mockFirestoreService,
             authService: mockAuthService,
             speechManager: mockSpeechManager,
-            translationService: mockTranslationService,
+            translationService: mockTranslationService, // ✅ تستخدم النسخة الجديدة
             textToSpeechService: mockTextToSpeechService
         )
 
@@ -333,5 +342,6 @@ struct ConversationView_Previews: PreviewProvider {
             .environmentObject(mockSpeechManager)
             .environmentObject(mockTranslationService)
             .environmentObject(mockTextToSpeechService)
+            .environmentObject(mockGeminiService) // ✅ لا تنس تمرير GeminiService إلى البيئة
     }
 }
