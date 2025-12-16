@@ -25,22 +25,6 @@ struct QRCodeScannerView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: ScannerViewController, context: Context) {
         // لا يوجد تحديث هنا حالياً
     }
-    
-
-    // لا نحتاج لـ Coordinator هنا لأن ScannerViewController هو نفسه delegate لـ AVCaptureMetadataOutputObjectsDelegate
-    // makeCoordinator و Coordinator class ليست ضرورية لـ UIViewControllerRepresentable إذا كان الـ UIViewController نفسه هو الديليجيت
-    // ولكن لن تسبب مشكلة إذا تركتها. للحفاظ على الكود الأصلي، سنتركها.
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    class Coordinator: NSObject {
-        var parent: QRCodeScannerView
-
-        init(_ parent: QRCodeScannerView) {
-            self.parent = parent
-        }
-    }
 }
 
 struct QRCodeScannerContainerView: View {

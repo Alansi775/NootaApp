@@ -1,0 +1,117 @@
+# Xcode
+build/
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.swiftpm/xcode/package.xcworkspace/xcuserdata/
+.build/
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Swift Package Manager
+.swiftpm/
+
+# Xcode IDE
+.DS_Store
+*.swiftpm
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Node.js / Backend
+node_modules/
+npm-debug.log
+yarn-error.log
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# Firebase
+google-services.json
+GoogleService-Info.plist.bak
+
+# Audio files
+voice_*.wav
+audio_uploads/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*~
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Mac
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# IDE specific
+.vscode/settings.json
+.idea/workspace.xml
+
+# Project specific
+uploads/
+temp/
+cache/
+.cache/

@@ -13,7 +13,7 @@ import AVFoundation // لـ AVSpeechSynthesizer
 class RoomViewModel: ObservableObject {
     @Published var roomID: String
     @Published var currentUser: User
-    @Published var messages: [ChatMessage] = []
+    @Published var messages: [Message] = []
     @Published var otherParticipant: User?
     @Published var userLanguageCode: String = "en"
     @Published var hasSelectedLanguage: Bool = false
@@ -139,7 +139,7 @@ class RoomViewModel: ObservableObject {
             Logger.log("Room's active speaker updated from Firestore: \(roomActiveSpeakerUID)", level: .info)
         } else if activeSpeakerUID == nil && room.hostUserID == currentUser.id {
             self.activeSpeakerUID = currentUser.id
-            Logger.log("Initial active speaker set to host: \(currentUser.id)", level: .info)
+            Logger.log("Initial active speaker set to host: \(currentUser.id ?? "Unknown")", level: .info)
         }
             
         self.canSpeak = (self.activeSpeakerUID == currentUser.id)
@@ -173,21 +173,17 @@ class RoomViewModel: ObservableObject {
                 
                 Logger.log("Translated text: \(translatedText)", level: .debug)
                 
-                // ✨ هذا هو الإصلاح الرئيسي لإنشاء ChatMessage
-                // يجب أن تتطابق الباراميترات مع تعريف ChatMessage struct بالضبط
-                let newChatMessage = ChatMessage(
-                    id: UUID().uuidString, // ID للرسالة الجديدة
+                // ✨ Create Message struct
+                let newMessage = Message(
                     senderUID: currentUser.id ?? "unknown",
-                    text: text, // النص الأصلي الذي تم التحدث به
+                    originalText: text,
+                    translatedText: translatedText,
                     originalLanguageCode: userLanguageCode,
-                    timestamp: Date(), // التاريخ والوقت الحالي
-                    originalText: text, // النص الأصلي
-                    translatedText: translatedText, // النص المترجم
-                    targetLanguageCode: targetLanguageCode, // لغة الهدف
-                    senderPreferredVoiceGender: currentUser.preferredVoiceGender ?? VoiceGender.default.rawValue // جنس الصوت المفضل للمرسل
+                    targetLanguageCode: targetLanguageCode,
+                    senderPreferredVoiceGender: currentUser.preferredVoiceGender ?? "default"
                 )
                 
-                try await self.firestoreService.addMessageToRoom(roomID: roomID, message: newChatMessage)
+                try await self.firestoreService.addMessageToRoom(roomID: roomID, message: newMessage)
                 Logger.log("Message sent to Firestore successfully.", level: .info)
                 
             } catch {
@@ -205,8 +201,8 @@ class RoomViewModel: ObservableObject {
         return otherParticipant?.preferredLanguageCode ?? (userLanguageCode == "en-US" ? "ar-SA" : "en-US")
     }
 
-    private func sendMessageToFirestore(message: ChatMessage) async throws { // ✨ تأكد من نوع الرسالة ChatMessage
-        try await firestoreService.addMessageToRoom(roomID: roomID, message: message) // ✨ الاسم الصحيح للدالة
+    private func sendMessageToFirestore(message: Message) async throws {
+        try await firestoreService.addMessageToRoom(roomID: roomID, message: message)
         Logger.log("Message sent to Firestore successfully.", level: .info)
     }
     

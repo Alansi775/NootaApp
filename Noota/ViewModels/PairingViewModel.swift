@@ -17,6 +17,7 @@ class PairingViewModel: ObservableObject {
     
     @Published var showConversationView: Bool = false
     @Published var opponentUser: User?
+    @Published var conversationViewModel: ConversationViewModel?
     
     // MARK: - Services
 
@@ -128,21 +129,18 @@ class PairingViewModel: ObservableObject {
         isLoading = true // Start loading state
         errorMessage = nil
         
+        // Call joinRoom on FirestoreService
         do {
-            // Call joinRoom on FirestoreService
-            try await firestoreService.joinRoom(roomID: id, participantUserID: currentUser.id!)
-            Logger.log("Room join process started for ID: \(id)", level: .info)
-            
-            // The `firestoreService.$currentFirestoreRoom` sink will now handle updating
-            // `self.currentRoom`, `self.roomID`, and `self.qrCodeImage` once Firestore confirms the join.
-            
+            let room = try await firestoreService.joinRoom(roomID: id, participantUserID: currentUser.id!)
+            Logger.log("Successfully joined room: \(room.id ?? "unknown")", level: .info)
         } catch {
             errorMessage = "Failed to join room: \(error.localizedDescription)"
             Logger.log("Error joining room: \(error.localizedDescription)", level: .error)
-            // No need to clear currentRoom/roomID/qrCodeImage here, as the sink
-            // should correctly update if the join fails (room becomes nil or
-            // remains unchanged in FirestoreService).
         }
+        
+        // The `firestoreService.$currentFirestoreRoom` sink will now handle updating
+        // `self.currentRoom`, `self.roomID`, and `self.qrCodeImage` once Firestore confirms the join.
+        
         isLoading = false // End loading state
     }
     

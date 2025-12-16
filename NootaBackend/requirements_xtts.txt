@@ -1,0 +1,87 @@
+# XTTS v2 Server Requirements
+
+This file lists all Python dependencies for the XTTS v2 server.
+
+## Core Dependencies
+
+TTS>=0.18.0
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+flask>=2.3.0
+flask-cors>=4.0.0
+python-dotenv>=1.0.0
+
+## Installation
+
+### Quick Install (Recommended)
+
+```bash
+# Create virtual environment
+python3 -m venv xtts_env
+source xtts_env/bin/activate  # On Windows: xtts_env\Scripts\activate
+
+# Install all dependencies
+pip install -r requirements_xtts.txt
+```
+
+### Manual Installation
+
+```bash
+pip install TTS torch flask flask-cors python-dotenv
+```
+
+## Notes
+
+- **GPU Support**: XTTS v2 runs much faster on GPU (NVIDIA with CUDA)
+- **Model Size**: XTTS v2 model is ~2GB, downloaded on first run
+- **Python Version**: Python 3.8+ required
+- **Memory**: 8GB RAM minimum (16GB recommended for concurrent requests)
+
+## GPU Setup (Optional but Recommended)
+
+### For NVIDIA GPUs (CUDA)
+
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+### For macOS with Metal
+
+```bash
+# Metal acceleration is included in latest PyTorch
+pip install torch torchvision torchaudio
+```
+
+## Troubleshooting
+
+### ImportError: No module named 'TTS'
+
+```bash
+pip install --upgrade TTS
+```
+
+### CUDA out of memory
+
+Reduce batch size or use CPU:
+- XTTS uses 1 text at a time, so no batch size issue typically
+- If slow on CPU, consider using GPU
+
+### Model download fails
+
+```bash
+# Manually download model
+python -c "from TTS.api import TTS; TTS('tts_models/multilingual/multi_speaker/xtts_v2')"
+```
+
+## Performance
+
+**Typical Generation Times**:
+- GPU (NVIDIA RTX 3080): 2-4 seconds per audio
+- GPU (Apple Silicon): 5-10 seconds per audio
+- CPU (Intel i7): 15-30 seconds per audio
+
+**Memory Usage**:
+- Model loading: ~3-4GB VRAM
+- Generation: ~2-3GB VRAM
+- Total: ~6-7GB VRAM (Tesla V100 or better recommended)

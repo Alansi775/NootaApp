@@ -1,71 +1,245 @@
 // Noota/Services/TextToSpeechService.swift
 
 import Foundation
-import AVFoundation // Required for AVSpeechSynthesizer
+import AVFoundation
 import Combine
 
-class TextToSpeechService: NSObject, AVSpeechSynthesizerDelegate, ObservableObject {
-    private let synthesizer = AVSpeechSynthesizer()
+/// 🎤 خدمة تشغيل الصوت من الـ Backend
+/// يوفر نظام قائمة انتظار لتشغيل قطع الصوت بشكل متتالي بدون فجوات
+/// ✨ النسخة الجديدة: تشغيل الملفات الصوتية من الـ Backend فقط (بدون local TTS)
+class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
+    
+    // MARK: - Published Properties
+    
+    @Published var isSpeaking = false
+    @Published var currentChunkIndex = 0
+    @Published var totalChunks = 0
+    
+    // MARK: - Private Properties
+    
+    private var audioPlayer: AVAudioPlayer?
+    private var audioQueue: [String] = []  // قائمة انتظار روابط الصوت
+    private var isProcessingQueue = false
+    private let queueLock = NSLock()  // حماية الوصول المتزامن
     
     override init() {
         super.init()
-        synthesizer.delegate = self
+        setupAudioSession()
     }
-
-    /// Speaks the given text in the specified language.
+    
+    // MARK: - Audio Session Setup
+    
+    /// إعداد جلسة الصوت للتشغيل المتواصل
+    private func setupAudioSession() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .default, options: .duckOthers)
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            Logger.log("🔊 Audio session configured for continuous playback", level: .info)
+        } catch {
+            Logger.log("❌ Error configuring audio session: \(error.localizedDescription)", level: .error)
+        }
+    }
+    
+    // MARK: - Queue Management
+    
+    /// إضافة قطعة صوتية واحدة إلى قائمة الانتظار
     /// - Parameters:
-    ///   - text: The text to be spoken.
-    ///   - languageCode: The language code (e.g., "en-US", "ar-SA") for the speech.
-    func speak(text: String, languageCode: String) {
-        // Ensure there's no ongoing speech to avoid overlap
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
+    ///   - audioUrl: رابط القطعة الصوتية من Firebase Storage
+    ///   - totalChunks: إجمالي عدد القطع (للتتبع)
+    func enqueueAudioChunk(url audioUrl: String, totalChunks: Int = 0) {
+        queueLock.lock()
+        defer { queueLock.unlock() }
+        
+        audioQueue.append(audioUrl)
+        
+        DispatchQueue.main.async {
+            self.totalChunks = totalChunks > 0 ? totalChunks : self.totalChunks
+            Logger.log("📝 Audio chunk enqueued (\(self.audioQueue.count) in queue)", level: .info)
         }
         
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: languageCode)
-        
-        // Optional: Adjust speech parameters for better quality
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate // Default speed
-        utterance.pitchMultiplier = 1.0 // Normal pitch
-        utterance.volume = 1.0 // Full volume
-        
-        synthesizer.speak(utterance)
-        Logger.log("TextToSpeechService: Speaking '\(text)' in '\(languageCode)'", level: .info)
+        // إذا لم يكن هناك تشغيل جاري، ابدأ معالجة القائمة
+        if !isProcessingQueue {
+            processQueue()
+        }
     }
-
-    /// Stops any ongoing speech immediately.
+    
+    /// إضافة عدة قطع صوتية مرة واحدة
+    /// - Parameters:
+    ///   - audioUrls: قائمة روابط الصوت
+    ///   - totalChunks: إجمالي عدد القطع
+    func enqueueAudioChunks(_ audioUrls: [String], totalChunks: Int = 0) {
+        queueLock.lock()
+        defer { queueLock.unlock() }
+        
+        audioQueue.append(contentsOf: audioUrls)
+        
+        DispatchQueue.main.async {
+            self.totalChunks = totalChunks > 0 ? totalChunks : self.totalChunks
+            Logger.log("📝 \(audioUrls.count) audio chunks enqueued (\(self.audioQueue.count) total in queue)", level: .info)
+        }
+        
+        // إذا لم يكن هناك تشغيل جاري، ابدأ معالجة القائمة
+        if !isProcessingQueue {
+            processQueue()
+        }
+    }
+    
+    // MARK: - Queue Processing
+    
+    /// معالجة قائمة الانتظار: تشغيل القطع الواحدة تلو الأخرى
+    private func processQueue() {
+        queueLock.lock()
+        let nextUrl = audioQueue.first.map { $0 }
+        queueLock.unlock()
+        
+        guard let urlString = nextUrl else {
+            // انتهينا من القائمة
+            DispatchQueue.main.async { [weak self] in
+                self?.isSpeaking = false
+                self?.isProcessingQueue = false
+                Logger.log("✅ Audio queue completed", level: .info)
+            }
+            return
+        }
+        
+        isProcessingQueue = true
+        DispatchQueue.main.async { [weak self] in
+            self?.isSpeaking = true
+        }
+        
+        // تشغيل التنزيل والتشغيل في background thread لتجنب blocking Main Thread
+        Task(priority: .userInitiated) {
+            await downloadAndPlayAudio(from: urlString)
+        }
+    }
+    
+    // MARK: - Audio Download & Playback
+    
+    /// تنزيل وتشغيل قطعة صوتية من Firebase Storage
+    /// - Parameter urlString: رابط الملف الصوتي
+    private func downloadAndPlayAudio(from urlString: String) async {
+        Logger.log("⬇️ Downloading audio chunk: \(urlString.prefix(60))...", level: .info)
+        
+        do {
+            guard let audioURL = URL(string: urlString) else {
+                Logger.log("❌ Invalid audio URL", level: .error)
+                removeFirstQueueItem()
+                return
+            }
+            
+            // تنزيل الملف الصوتي مع timeout
+            var request = URLRequest(url: audioURL)
+            request.timeoutInterval = 30.0
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            // التحقق من رمز الحالة HTTP
+            if let httpResponse = response as? HTTPURLResponse {
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    Logger.log("❌ HTTP Error: \(httpResponse.statusCode)", level: .error)
+                    removeFirstQueueItem()
+                    return
+                }
+            }
+            
+            Logger.log("✅ Audio downloaded (\(data.count) bytes)", level: .info)
+            
+            // تشغيل الصوت على الـ Main Thread
+            DispatchQueue.main.async { [weak self] in
+                self?.playAudioData(data)
+            }
+            
+        } catch {
+            Logger.log("❌ Error downloading audio: \(error.localizedDescription)", level: .error)
+            removeFirstQueueItem()
+        }
+    }
+    
+    /// تشغيل بيانات الصوت مباشرة
+    /// - Parameter audioData: بيانات الملف الصوتي (WAV/MP3)
+    private func playAudioData(_ audioData: Data) {
+        do {
+            // إيقاف التشغيل السابق
+            audioPlayer?.stop()
+            
+            // إنشاء مشغل صوتي جديد
+            audioPlayer = try AVAudioPlayer(data: audioData, fileTypeHint: AVFileType.wav.rawValue)
+            audioPlayer?.delegate = self
+            
+            // تحديث العداد - نتأكد أنه على Main Thread
+            self.currentChunkIndex += 1
+            
+            // بدء التشغيل
+            audioPlayer?.play()
+            Logger.log("▶️ Playing audio chunk (\(currentChunkIndex)/\(totalChunks))", level: .info)
+            
+        } catch {
+            Logger.log("❌ Error creating audio player: \(error.localizedDescription)", level: .error)
+            removeFirstQueueItem()
+        }
+    }
+    
+    /// إزالة أول عنصر من قائمة الانتظار والمتابعة
+    private func removeFirstQueueItem() {
+        queueLock.lock()
+        defer { queueLock.unlock() }
+        
+        if !audioQueue.isEmpty {
+            audioQueue.removeFirst()
+        }
+        
+        // استمر إلى القطعة التالية - بدون تأخير زائد
+        processQueue()
+    }
+    
+    // MARK: - Playback Control
+    
+    /// إيقاف التشغيل وتفريغ قائمة الانتظار
     func stopSpeaking() {
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
-            Logger.log("TextToSpeechService: Stopped speaking.", level: .info)
+        queueLock.lock()
+        defer { queueLock.unlock() }
+        
+        audioPlayer?.stop()
+        audioQueue.removeAll()
+        isProcessingQueue = false
+        
+        DispatchQueue.main.async {
+            self.isSpeaking = false
+            self.currentChunkIndex = 0
+            Logger.log("⏹️ Stopped audio playback and cleared queue", level: .info)
         }
     }
     
-    // MARK: - AVSpeechSynthesizerDelegate (Optional, but good for logging/status)
-    
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        Logger.log("TextToSpeechService: Started speaking: '\(utterance.speechString)'", level: .debug)
+    /// إيقاف مؤقت (لاستئناف لاحقاً)
+    func pauseSpeaking() {
+        audioPlayer?.pause()
+        DispatchQueue.main.async {
+            self.isSpeaking = false
+            Logger.log("⏸️ Paused audio playback", level: .info)
+        }
     }
     
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Logger.log("TextToSpeechService: Finished speaking: '\(utterance.speechString)'", level: .debug)
+    /// استئناف التشغيل
+    func resumeSpeaking() {
+        audioPlayer?.play()
+        DispatchQueue.main.async {
+            self.isSpeaking = true
+            Logger.log("▶️ Resumed audio playback", level: .info)
+        }
     }
     
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didPause utterance: AVSpeechUtterance) {
-        Logger.log("TextToSpeechService: Paused speaking: '\(utterance.speechString)'", level: .debug)
+    // MARK: - AVAudioPlayerDelegate
+    
+    /// عند انتهاء تشغيل قطعة صوتية، انتقل للقطعة التالية
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Logger.log("✅ Audio chunk playback finished (success: \(flag))", level: .info)
+        removeFirstQueueItem()
     }
     
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didContinue utterance: AVSpeechUtterance) {
-        Logger.log("TextToSpeechService: Continued speaking: '\(utterance.speechString)'", level: .debug)
-    }
-    
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Logger.log("TextToSpeechService: Canceled speaking: '\(utterance.speechString)'", level: .debug)
-    }
-    
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
-        // This delegate method can be used to highlight words as they are spoken
-        // Logger.log("TextToSpeechService: Will speak range \(characterRange) of '\(utterance.speechString)'", level: .debug)
+    /// في حالة حدوث خطأ أثناء التشغيل، انتقل للقطعة التالية
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        Logger.log("❌ Audio decode error: \(error?.localizedDescription ?? "Unknown")", level: .error)
+        removeFirstQueueItem()
     }
 }

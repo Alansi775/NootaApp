@@ -67,31 +67,26 @@ class FirestoreService: ObservableObject {
         // Assume `createdAt` is a property in your Room struct
         // roomToSave.createdAt = Timestamp(date: Date())
 
-        do {
-            // Use addDocument(from:) which takes an Encodable object directly
-            let documentRef = try await db.collection("rooms").addDocument(from: roomToSave)
-            
-            let newRoomID = documentRef.documentID
-            Logger.log("Room successfully created with Firestore-generated ID: \(newRoomID)", level: .info)
-            
-            // Update the ID of the room object you're returning
-            roomToSave.id = newRoomID
-            
-            // IMPORTANT: Immediately start listening to this newly created room
-            await listenToRoomRealtime(roomID: newRoomID)
-            
-            return roomToSave // Return the updated room with the Firestore ID
-        } catch {
-            Logger.log("Error creating room in Firestore: \(error.localizedDescription)", level: .error)
-            throw AppError.firestoreError("Failed to create room: \(error.localizedDescription)")
-        }
+        // Use addDocument(from:) which takes an Encodable object directly
+        let documentRef = try await db.collection("rooms").addDocument(from: roomToSave)
+        
+        let newRoomID = documentRef.documentID
+        Logger.log("Room successfully created with Firestore-generated ID: \(newRoomID)", level: .info)
+        
+        // Update the ID of the room object you're returning
+        roomToSave.id = newRoomID
+        
+        // IMPORTANT: Immediately start listening to this newly created room
+        await listenToRoomRealtime(roomID: newRoomID)
+        
+        return roomToSave // Return the updated room with the Firestore ID
     }
 
     func joinRoom(roomID: String, participantUserID: String) async throws -> Room {
         let roomRef = self.db.collection("rooms").document(roomID)
 
         // The closure for runTransaction is non-throwing and returns Any?
-        return try await db.runTransaction { (transaction, errorPointer) -> Any? in
+        let result = try await db.runTransaction { (transaction, errorPointer) -> Any? in
             let roomDocument: DocumentSnapshot
             do {
                 roomDocument = try transaction.getDocument(roomRef)
@@ -139,7 +134,13 @@ class FirestoreService: ObservableObject {
             }
             
             return room // Return the updated room object from the transaction
-        } as! Room // Cast the Any? result back to Room on success
+        } as? Room
+        
+        guard let room = result else {
+            throw AppError.firestoreError("Failed to join room - transaction returned invalid result")
+        }
+        
+        return room
     }
     
     @MainActor
@@ -161,35 +162,47 @@ class FirestoreService: ObservableObject {
                     return nil
                 }
                 
+                Logger.log("👤 Removing participant \(participantUserID) from room \(roomID)", level: .info)
+                
                 // ✅ الخطوة 1: إزالة المستخدم من قائمة المشاركين
                 room.participantUIDs.removeAll(where: { $0 == participantUserID })
                 room.participantLanguages?[participantUserID] = nil
                 
-                // ✅ الخطوة 2: تحديث المنطق: حذف الغرفة إذا كان عدد المشاركين 0 أو 1
-                if room.participantUIDs.count <= 1 {
-                    // ملاحظة: لا يمكن حذف المجموعات الفرعية داخل Transaction.
-                    // سنقوم بذلك بعد اكتمال الـ Transaction.
+                // ✅ الخطوة 2: تحديث المنطق: حذف الغرفة إذا كان عدد المشاركين 0
+                if room.participantUIDs.isEmpty {
+                    // إذا لم يبقَ أحد - احذف الغرفة
+                    Logger.log("🗑️ No participants left. Deleting room \(roomID).", level: .info)
                     transaction.deleteDocument(roomRef)
-                    Logger.log("Room \(roomID) marked for deletion as last participant left.", level: .info)
+                } else if room.participantUIDs.count == 1 {
+                    // إذا بقي مشارك واحد فقط - اجعل الغرفة محتفلة لكي يخرج المستخدم الآخر
+                    Logger.log("⚠️ One participant left. Marking room \(roomID) as 'ending'.", level: .info)
+                    room.status = .ended
+                    do {
+                        try transaction.setData(from: room, forDocument: roomRef)
+                        Logger.log("✅ Room \(roomID) marked as 'ended'. Waiting for last participant to leave.", level: .info)
+                    } catch let setDataError as NSError {
+                        errorPointer?.pointee = setDataError
+                        return nil
+                    }
                 } else {
-                    // إذا كان هناك أكثر من مشارك واحد، فقط نقوم بتحديث الوثيقة
+                    // إذا كان هناك أكثر من مشارك واحد
+                    Logger.log("✅ User removed. Still have \(room.participantUIDs.count) participants. Updating room.", level: .info)
                     do {
                         try transaction.setData(from: room, forDocument: roomRef)
                     } catch let setDataError as NSError {
                         errorPointer?.pointee = setDataError
                         return nil
                     }
-                    Logger.log("User \(participantUserID) successfully left room \(roomID).", level: .info)
                 }
                 return nil
             }
             
-            // ✅ الخطوة 3: بعد نجاح الـ Transaction، نتحقق من حذف الغرفة ونقوم بتنظيف الرسائل.
+            // ✅ الخطوة 3: بعد نجاح الـ Transaction، تحقق من حذف الغرفة
             let roomDoc = try await roomRef.getDocument()
             
             if !roomDoc.exists {
-                Logger.log("Room \(roomID) was deleted by the transaction. Now deleting its subcollections.", level: .info)
-                try await deleteRoomAndSubcollections(roomID: roomID)
+                Logger.log("🗑️ Room \(roomID) was deleted. Now deleting its messages.", level: .info)
+                try await deleteRoomMessages(roomID: roomID)
             }
         }
 
@@ -233,7 +246,7 @@ class FirestoreService: ObservableObject {
                 let room = try document.data(as: Room.self)
                 DispatchQueue.main.async {
                     self.currentFirestoreRoom = room
-                    Logger.log("Realtime update for room \(room.id ?? "N/A"). Status: \(room.status.rawValue ?? "N/A"), Participants: \(room.participantUIDs.count ?? 0)", level: .debug)
+                    Logger.log("Realtime update for room \(room.id ?? "N/A"). Status: \(room.status). Participants: \(room.participantUIDs.count)", level: .debug)
                 }
             } catch {
                 Logger.log("Error decoding room data from snapshot for room \(roomID): \(error.localizedDescription)", level: .error)
@@ -288,7 +301,7 @@ class FirestoreService: ObservableObject {
     
     // MARK: - Message Operations
             
-    func addMessageToRoom(roomID: String, message: ChatMessage) async throws {
+    func addMessageToRoom(roomID: String, message: Message) async throws {
         let roomMessagesCollection = db.collection("rooms").document(roomID).collection("messages")
         
         do {
@@ -300,49 +313,30 @@ class FirestoreService: ObservableObject {
         }
     }
             
-    func listenToMessages(roomID: String, completion: @escaping ([ChatMessage], Error?) -> Void) -> ListenerRegistration {
+    func listenToMessages(roomID: String, completion: @escaping ([Message], Error?) -> Void) -> ListenerRegistration {
         return db.collection("rooms").document(roomID).collection("messages")
             .order(by: "timestamp", descending: false)
             .addSnapshotListener { querySnapshot, error in
                 if let error = error {
+                    Logger.log("Error listening to messages: \(error.localizedDescription)", level: .error)
                     completion([], error)
                     return
                 }
-                let fetchedMessages = querySnapshot?.documents.compactMap { document -> ChatMessage? in
-                    try? document.data(as: ChatMessage.self)
+                
+                // ✨ تحديث: قراءة الحقول الجديدة من XTTS v2 Backend
+                let fetchedMessages = querySnapshot?.documents.compactMap { document -> Message? in
+                    do {
+                        let message = try document.data(as: Message.self)
+                        return message
+                    } catch {
+                        Logger.log("Error decoding message: \(error)", level: .error)
+                        return nil
+                    }
                 } ?? []
+                
+                Logger.log("✅ Fetched \(fetchedMessages.count) messages with XTTS data", level: .info)
                 completion(fetchedMessages, nil)
             }
-    }
-            
-    func listenToRoomMessages(roomID: String) -> AnyPublisher<[ChatMessage], Error> {
-        let subject = PassthroughSubject<[ChatMessage], Error>()
-
-        let listener = self.db.collection("rooms").document(roomID).collection("messages")
-            .order(by: "timestamp", descending: false)
-            .addSnapshotListener { querySnapshot, error in
-                if let error = error {
-                    Logger.log("Error listening to messages in room \(roomID): \(error.localizedDescription)", level: .error)
-                    subject.send(completion: .failure(error))
-                    return
-                }
-
-                guard let documents = querySnapshot?.documents else {
-                    subject.send([])
-                    return
-                }
-
-                let messages = documents.compactMap { document -> ChatMessage? in
-                    try? document.data(as: ChatMessage.self)
-                }
-                subject.send(messages)
-            }
-
-        return subject.handleEvents(receiveCancel: {
-            listener.remove()
-            Logger.log("Stopped listening to messages in room \(roomID).", level: .info)
-        })
-        .eraseToAnyPublisher()
     }
     
     func updateRoomActiveSpeaker(roomID: String, activeSpeakerUID: String?) async throws {
@@ -351,6 +345,34 @@ class FirestoreService: ObservableObject {
     }
 
     // الكود الجديد والمُعدَّل
+    // ✅ دالة جديدة: حذف رسائل الغرفة فقط (بدون حذف الغرفة نفسها)
+    func deleteRoomMessages(roomID: String) async throws {
+        Logger.log("🗑️ Starting to delete messages for room \(roomID)...", level: .info)
+        
+        let messagesCollection = db.collection("rooms").document(roomID).collection("messages")
+        let messages = try await messagesCollection.getDocuments().documents
+        
+        Logger.log("📊 Found \(messages.count) messages to delete.", level: .info)
+        
+        if messages.isEmpty {
+            Logger.log("✅ No messages to delete for room \(roomID).", level: .info)
+            return
+        }
+        
+        // استخدم 'batch' للحذف الجماعي ليكون أسرع وأكثر كفاءة
+        let batch = db.batch()
+        for message in messages {
+            batch.deleteDocument(messagesCollection.document(message.documentID))
+        }
+        
+        try await batch.commit()
+        Logger.log("✅ All \(messages.count) messages for room \(roomID) have been deleted.", level: .info)
+        
+        // حذف وثيقة الغرفة نفسها بعد حذف الرسائل
+        try await db.collection("rooms").document(roomID).delete()
+        Logger.log("✅ Room \(roomID) document has been deleted.", level: .info)
+    }
+    
     func deleteRoomAndSubcollections(roomID: String) async throws {
         // الخطوة 1: حذف جميع الرسائل في المجموعة الفرعية 'messages'
         let messagesCollection = db.collection("rooms").document(roomID).collection("messages")
@@ -379,6 +401,34 @@ class FirestoreService: ObservableObject {
             Logger.log("User \(userID) language updated to \(languageCode) in room \(roomID).", level: .info)
         } catch {
             Logger.log("Error updating participant language in room \(roomID) for user \(userID): \(error.localizedDescription)", level: .error)
+        }
+    }
+    
+    // MARK: - Message Translation Re-fetch
+    func fetchMessageTranslations(messageID: String, roomID: String, completion: @escaping (Message?) -> Void) {
+        let messageRef = db.collection("rooms").document(roomID).collection("messages").document(messageID)
+        
+        messageRef.getDocument { document, error in
+            if let error = error {
+                Logger.log("Error fetching message translations for \(messageID): \(error.localizedDescription)", level: .error)
+                completion(nil)
+                return
+            }
+            
+            guard let document = document, document.exists else {
+                Logger.log("Message document \(messageID) not found.", level: .warning)
+                completion(nil)
+                return
+            }
+            
+            do {
+                let message = try document.data(as: Message.self)
+                Logger.log("Successfully fetched message \(messageID) with translations: \(message.translations?.description ?? "none")", level: .info)
+                completion(message)
+            } catch {
+                Logger.log("Error decoding message \(messageID): \(error.localizedDescription)", level: .error)
+                completion(nil)
+            }
         }
     }
 }

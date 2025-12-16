@@ -2,14 +2,6 @@
 import Foundation
 import Combine // بما أننا نستخدم Publishers في FirestoreService
 
-// بروتوكول لـ delegate (يجب أن يكون في مكان يمكن الوصول إليه، عادةً في نفس ملف QRCodeScannerView)
-// سأفترض أنه موجود بالفعل.
-// protocol QRCodeScannerDelegate: AnyObject {
-//     func didScanQRCode(result: String)
-//     func scannerDidFail(error: Error)
-//     func scannerDidCancel()
-// }
-
 class MainAppViewCoordinator: NSObject, QRCodeScannerDelegate {
     // 💡 بدلاً من مرجع إلى الـ View، نستخدم closures لإبلاغ الـ View بالأحداث
     var didScanQRCodeAction: ((String) -> Void)?

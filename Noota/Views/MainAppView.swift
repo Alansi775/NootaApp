@@ -34,12 +34,7 @@ struct MainAppView: View {
             coordinator = MainAppViewCoordinator(
                 didScanQRCode: { scannedResult in
                     Task { @MainActor in
-                        do {
-                            try await self.pairingVM.joinRoom(with: scannedResult)
-                        } catch {
-                            self.alertMessage = "Failed to join room from QR: \(error.localizedDescription)"
-                            self.showAlert = true
-                        }
+                        await self.pairingVM.joinRoom(with: scannedResult)
                         self.showingQRScanner = false
                     }
                 },
@@ -262,19 +257,26 @@ struct MainAppView: View {
                 if let room = pairingVM.currentRoom,
                    let currentUser = authService.user,
                    let opponentUser = pairingVM.opponentUser {
-                    // 🚨 السطر الذي يحتاج للتعديل
-                    ConversationView(viewModel: ConversationViewModel(
+                    
+                    // ✅ إنشاء ViewModel مرة واحدة فقط
+                    let conversationVM = pairingVM.conversationViewModel ?? ConversationViewModel(
                         room: room,
                         currentUser: currentUser,
                         opponentUser: opponentUser,
                         firestoreService: firestoreService,
-                        authService: authService, // 💡 أضف هذا
-                        speechManager: speechManager, // 💡 أضف هذا
-                        translationService: translationService, // 💡 أضف هذا
-                        textToSpeechService: textToSpeechService // 💡 أضف هذا
-                    ))
+                        authService: authService,
+                        speechManager: speechManager,
+                        translationService: translationService,
+                        textToSpeechService: textToSpeechService
+                    )
+                    
+                    ConversationView(viewModel: conversationVM)
+                        .onAppear {
+                            pairingVM.conversationViewModel = conversationVM
+                        }
                         .onDisappear {
                             Logger.log("ConversationView disappeared.", level: .info)
+                            pairingVM.conversationViewModel = nil
                         }
                 } else {
                     Text("Error: Room data, current user, or opponent info missing. Please try again.")

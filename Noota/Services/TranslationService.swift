@@ -2,8 +2,6 @@
 
 import Foundation
 import Combine
-// ✅ افتراض وجود GeminiService - يجب أن يكون هذا الملف متوفراً لديك
-// import GeminiService
 
 // يجب أن تكون هذه الخريطة مطابقة لـ supportedLanguages في ViewModel
 // ولكن نستخدم الأسماء الكاملة لمساعدة نموذج LLM

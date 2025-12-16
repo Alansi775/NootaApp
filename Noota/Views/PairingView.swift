@@ -122,8 +122,8 @@ struct PairingView: View {
                 if let room = viewModel.currentRoom,
                    let currentUser = viewModel.authService.user,
                    let opponentUser = viewModel.opponentUser {
-                                        
-                    ConversationView(viewModel: ConversationViewModel(
+                    
+                    let conversationVM = viewModel.conversationViewModel ?? ConversationViewModel(
                         room: room,
                         currentUser: currentUser,
                         opponentUser: opponentUser,
@@ -132,16 +132,18 @@ struct PairingView: View {
                         speechManager: speechManager,
                         translationService: translationService,
                         textToSpeechService: textToSpeechService
-                    ))
-                    .onAppear {
-                        // 🚨 هذا هو المكان الصحيح لـ Logger.log 🚨
-                        Logger.log("Navigating to ConversationView for room ID: \(room.id ?? "N/A").", level: .info)
-                        Logger.log("ConversationView did appear from navigationDestination.", level: .info)
-                    }
-                    .onDisappear {
-                        Logger.log("ConversationView did disappear. Resetting pairing view state.", level: .info)
-                        viewModel.resetPairingState()
-                    }
+                    )
+                    
+                    ConversationView(viewModel: conversationVM)
+                        .onAppear {
+                            viewModel.conversationViewModel = conversationVM
+                            Logger.log("Navigating to ConversationView for room ID: \(room.id ?? "N/A").", level: .info)
+                        }
+                        .onDisappear {
+                            Logger.log("ConversationView did disappear. Resetting pairing view state.", level: .info)
+                            viewModel.resetPairingState()
+                            viewModel.conversationViewModel = nil
+                        }
 
                 } else {
                     Text("Error: Required data for conversation is missing.")
