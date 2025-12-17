@@ -3,6 +3,8 @@ import { initializeLogger } from '../config/logger.js';
 import { generateSpeechWithTranslation } from './xttsService.js';
 import { downloadUserAudio, saveAudioToTemp, cleanupTempFile, uploadAudioChunk } from './audioManager.js';
 import { splitTextIntoChunks, validateChunks, getChunkMetadata } from './textSplitter.js';
+import path from 'path';
+import fs from 'fs';
 
 const logger = initializeLogger();
 
@@ -25,7 +27,7 @@ export async function processMessage(params) {
       processedChunks: 0,
     });
 
-    logger.info(`✅ Started processing message ${messageId} in room ${roomId}`);
+    logger.info(` Started processing message ${messageId} in room ${roomId}`);
 
     // Extract message data
     const originalText = message.originalText || message.text;
@@ -38,7 +40,7 @@ export async function processMessage(params) {
     }
 
     logger.info(
-      `📝 Message: "${originalText.substring(0, 50)}..." | ` +
+      ` Message: "${originalText.substring(0, 50)}..." | ` +
       `Sender: ${senderUID} | Language: ${sourceLanguage}`
     );
 
@@ -53,24 +55,47 @@ export async function processMessage(params) {
       .map(([_, lang]) => lang);
 
     if (targetLanguages.length === 0) {
-      logger.warn(`⚠️ No target languages found, defaulting to English`);
+      logger.warn(` No target languages found, defaulting to English`);
       targetLanguages.push('en');
     }
 
     logger.info(`🗣️ Target languages: ${targetLanguages.join(', ')}`);
 
-    // Step 1: Download user's original audio for voice cloning
-    let userAudioPath = null;
-    if (originalAudioUrl) {
-      try {
-        logger.info(`📥 Downloading user's original audio for voice cloning...`);
-        const audioBuffer = await downloadUserAudio(originalAudioUrl);
-        userAudioPath = saveAudioToTemp(audioBuffer);
-        logger.info(`✅ User audio ready: ${userAudioPath}`);
-      } catch (error) {
-        logger.warn(`⚠️ Could not download user audio:`, error.message);
-        // Continue without user audio (will use default TTS voice)
+    // Step 1: Get user's voice profile (stored in Firestore user document)
+    // This is the voice profile from Settings, not the individual message audio
+    let voiceProfilePath = null;
+    try {
+      const userDoc = await db.collection('users').doc(senderUID).get();
+      const userData = userDoc.data() || {};
+      const voiceProfileStoragePath = userData.voiceProfilePath; // e.g., "/audio_references/userId.wav"
+      
+      logger.info(` [DEBUG] Fetching voice profile for user: ${senderUID}`);
+      logger.info(` [DEBUG] voiceProfilePath from Firestore: ${voiceProfileStoragePath}`);
+      
+      if (voiceProfileStoragePath) {
+        // Convert storage path to file path
+        // voiceProfileStoragePath = "/audio_references/userId.wav"
+        const uploadsDir = path.join(path.dirname(new URL(import.meta.url).pathname), '../../uploads');
+        voiceProfilePath = path.join(uploadsDir, voiceProfileStoragePath.replace(/^\//, ''));
+        
+        logger.info(` [DEBUG] Full file path: ${voiceProfilePath}`);
+        
+        if (fs.existsSync(voiceProfilePath)) {
+          logger.info(` Using voice profile for cloning: ${voiceProfileStoragePath} (${voiceProfilePath})`);
+          logger.info(` [DEBUG] File EXISTS and is ready to be passed to XTTS`);
+        } else {
+          logger.warn(` [DEBUG] Voice profile file NOT FOUND at: ${voiceProfilePath}`);
+          logger.warn(`Voice profile file not found: ${voiceProfilePath}`);
+          voiceProfilePath = null;
+        }
+      } else {
+        logger.warn(` [DEBUG] User ${senderUID} has NO voice profile in Firestore`);
+        logger.warn(`User ${senderUID} has no voice profile in Firestore`);
       }
+    } catch (error) {
+      logger.error(` [ERROR] Exception while fetching voice profile: ${error.message}`);
+      logger.error(` [ERROR] Stack: ${error.stack}`);
+      logger.warn(`Could not fetch user's voice profile:`, error.message);
     }
 
     // Step 2: Split text into chunks
@@ -78,7 +103,7 @@ export async function processMessage(params) {
     validateChunks(chunks);
     
     const chunkMetadata = getChunkMetadata(chunks);
-    logger.info(`📊 Split into ${chunks.length} chunks: ${chunkMetadata.totalLength} total chars, avg ${chunkMetadata.averageChunkLength} chars/chunk`);
+    logger.info(` Split into ${chunks.length} chunks: ${chunkMetadata.totalLength} total chars, avg ${chunkMetadata.averageChunkLength} chars/chunk`);
 
     // Update Firestore with chunk count
     await docRef.update({
@@ -96,7 +121,7 @@ export async function processMessage(params) {
     // Step 4: Generate audio for each chunk in each target language
     for (const targetLang of targetLanguages) {
       try {
-        logger.info(`\n🔄 Starting generation for language: ${targetLang}`);
+        logger.info(`\n Starting generation for language: ${targetLang}`);
         
         const langTranslations = [];
         const langAudioUrls = [];
@@ -113,30 +138,36 @@ export async function processMessage(params) {
             );
 
             // Generate speech with translation for this chunk
-            logger.info(`🔄 Calling generateSpeechWithTranslation for chunk ${chunkIdx + 1}...`);
+            logger.info(` Calling generateSpeechWithTranslation for chunk ${chunkIdx + 1}...`);
+            logger.info(` [DEBUG] Passing to xttsService:`);
+            logger.info(` [DEBUG]   - text: "${chunk.substring(0, 40)}..."`);
+            logger.info(` [DEBUG]   - sourceLanguage: ${sourceLanguage}`);
+            logger.info(` [DEBUG]   - targetLanguage: ${targetLang}`);
+            logger.info(` [DEBUG]   - voiceProfilePath: ${voiceProfilePath}`);
+            
             let result;
             try {
               result = await generateSpeechWithTranslation({
                 text: chunk,
                 sourceLanguage: sourceLanguage,
                 targetLanguage: targetLang,
-                referenceAudio: userAudioPath, // Pass user's audio for voice cloning
+                referenceAudio: voiceProfilePath, //  Pass voice profile for voice cloning (not message audio)
               });
-              logger.info(`✅ generateSpeechWithTranslation returned successfully with translatedText: "${result.translatedText}"`);
+              logger.info(` generateSpeechWithTranslation returned successfully with translatedText: "${result.translatedText}"`);
             } catch (innerError) {
-              logger.error(`❌ generateSpeechWithTranslation threw an error:`, innerError.message);
+              logger.error(`generateSpeechWithTranslation threw an error:`, innerError.message);
               // DON'T re-throw - xttsService handles errors gracefully and returns translated text
               result = {
                 translatedText: chunk, // Fallback to original text
                 audioBuffer: Buffer.alloc(0),
               };
-              logger.warn(`⚠️  Using fallback with original text`);
+              logger.warn(`  Using fallback with original text`);
             }
 
             // Store translated text (always save it, even if audio generation failed)
-            logger.info(`📥 About to push translatedText to array: "${result.translatedText}"`);
+            logger.info(` About to push translatedText to array: "${result.translatedText}"`);
             langTranslations.push(result.translatedText);
-            logger.info(`✅ Successfully pushed translation. Array now has ${langTranslations.length} items`);
+            logger.info(` Successfully pushed translation. Array now has ${langTranslations.length} items`);
 
             // Upload audio chunk immediately
             const audioUrl = await uploadAudioChunk(result.audioBuffer, {
@@ -158,10 +189,10 @@ export async function processMessage(params) {
               lastUpdated: new Date(),
             });
 
-            logger.info(`   ✅ Chunk ${chunkIdx + 1} uploaded and Firestore updated`);
+            logger.info(`    Chunk ${chunkIdx + 1} uploaded and Firestore updated`);
 
           } catch (chunkError) {
-            logger.error(`   ❌ Error processing chunk ${chunkIdx + 1}:`, chunkError.message);
+            logger.error(`   Error processing chunk ${chunkIdx + 1}:`, chunkError.message);
             logger.error(`   Current langTranslations array:`, JSON.stringify(langTranslations));
             // Continue with next chunk despite error
             langTranslations.push(chunk); // Store original as fallback
@@ -173,11 +204,11 @@ export async function processMessage(params) {
         translations[targetLang] = langTranslations;
         audioUrls[targetLang] = langAudioUrls;
 
-        logger.info(`✅ Completed language ${targetLang}: ${processedChunkCount}/${chunks.length} chunks`);
-        logger.info(`🔥 About to save translations[${targetLang}]:`, JSON.stringify(langTranslations));
+        logger.info(` Completed language ${targetLang}: ${processedChunkCount}/${chunks.length} chunks`);
+        logger.info(` About to save translations[${targetLang}]:`, JSON.stringify(langTranslations));
 
       } catch (error) {
-        logger.error(`❌ Error processing language ${targetLang}:`, error.message);
+        logger.error(`Error processing language ${targetLang}:`, error.message);
         // Continue with other languages
       }
     }
@@ -190,12 +221,12 @@ export async function processMessage(params) {
       processingEndedAt: new Date(),
     });
 
-    logger.info(`🎉 Successfully completed processing message ${messageId}`);
+    logger.info(`Successfully completed processing message ${messageId}`);
 
     return { success: true, messageId, chunksProcessed: processedChunkCount };
 
   } catch (error) {
-    logger.error(`❌ Failed to process message ${messageId}:`, error.message);
+    logger.error(`Failed to process message ${messageId}:`, error.message);
     try {
       await docRef.update({
         processingStatus: 'failed',

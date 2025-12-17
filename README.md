@@ -1,20 +1,129 @@
-# Noota: Your App for Instant, AI-Powered Live Voice Translation
+# Noota: AI-Powered Live Voice Translation App
 
-**Noota** is an innovative voice communication app powered by cutting-edge AI models, allowing two people to speak different languages and still understand each other — in real-time. Whether you're chatting in Chinese while the other person listens in Spanish, or vice versa, Noota delivers translated audio instantly **in the original speaker’s voice and tone**.
-
-No need to learn a new language. Just speak your own — Noota handles the rest.
+**Noota** is an innovative voice communication application that enables real-time, multilingual conversations. Two people speaking different languages can communicate naturally - each hears the other person's voice translated into their native language while preserving the original speaker's unique tone and vocal characteristics.
 
 ---
 
-### Key Features:
+## Core Features
 
-* **Live AI Voice Translation:** Speak in your native language, and the other person hears you instantly in theirs.
-* **Voice Cloning:** Maintains your natural tone and vocal style for more human-like conversations.
-* **Instant Room Creation:** Start a new voice conversation with a single tap.
-* **Quick Join via QR Code:** Share your room’s QR code and let others join by scanning.
-* **Manual Room ID Entry:** Use the room ID if scanning isn’t possible.
-* **Private & Secure:** Conversations are peer-to-peer and encrypted.
-* **Under Active Development:** We’re continuously improving the AI and expanding language support.
+- **Real-Time AI Voice Translation**: Speak in your native language; the other person instantly hears you in theirs
+- **Advanced Voice Cloning**: Maintains natural tone, emotion, and vocal characteristics using fine-tuned XTTS v2
+- **Instant Room Creation**: Start conversations with a single tap
+- **QR Code & Room ID Sharing**: Multiple join methods for flexibility
+- **End-to-End Encrypted**: Private peer-to-peer conversations
+- **Multi-Language Support**: 10+ languages supported with near-native pronunciation
+
+---
+
+## Technology Stack
+
+### Frontend (iOS)
+- **Framework**: SwiftUI
+- **Architecture**: MVVM with Combine reactive programming
+- **Audio Processing**: AVFoundation with custom streaming optimization
+- **Real-time Speech Recognition**: Native Speech framework
+
+### Backend
+- **Runtime**: Node.js with Express.js
+- **AI Models**: 
+  - **XTTS v2**: Fine-tuned voice synthesis engine (1 month custom training)
+  - **Gemini API**: Multilingual translation with context awareness
+  - **Hugging Face Transformers**: NLP preprocessing
+- **Database**: Firebase Firestore (real-time message sync)
+- **Storage**: Firebase Cloud Storage (voice profiles & generated audio)
+
+---
+
+## Advanced XTTS v2 Implementation
+
+This project features a **custom fine-tuned XTTS v2 model** trained for 1 month with:
+
+- **Voice Profile Caching**: Eliminates redundant embedding calculations
+- **Streaming Optimization**: Downloads chunks progressively for immediate playback
+- **GPU Acceleration Support**: Optimized for both CUDA and CPU inference
+- **Automatic Voice Normalization**: Preprocessing for consistent quality
+- **Multi-language Voice Adaptation**: Specialized training across 10+ languages
+
+---
+
+## Quick Start
+
+### Prerequisites
+- iOS 15.0+
+- Node.js 16+
+- Python 3.11+
+- Firebase Account
+
+### Installation & Running
+
+1. **Clone Repository**
+   ```bash
+   git clone https://github.com/Alansi775/NootaApp.git
+   cd NootaApp
+   ```
+
+2. **Start All Services**
+   ```bash
+   bash NootaBackend/start-all.sh
+   ```
+   This script automatically:
+   - Starts the XTTS v2 voice synthesis server (port 8000)
+   - Launches the Node.js backend (port 3000)
+   - Initializes Firebase connections
+   - Warms up the AI models
+
+3. **Run iOS App**
+   ```bash
+   cd Noota
+   xed .
+   # Select target device/simulator and press Cmd+R
+   ```
+
+### Manual Server Start (if needed)
+   ```bash
+   # Terminal 1: XTTS Server
+   cd NootaBackend
+   python3.11 xtts_server_simple.py
+   
+   # Terminal 2: Node Backend
+   npm start
+   ```
+
+---
+
+## Project Structure
+
+```
+NootaApp/
+├── Noota/                          # iOS App (SwiftUI)
+│   ├── Views/                      # UI Components
+│   ├── ViewModels/                 # MVVM Logic
+│   ├── Services/                   # API & Business Logic
+│   ├── Models/                     # Data Models
+│   └── Assets/                     # Images & Localization
+├── NootaBackend/                   # Node.js Server
+│   ├── src/
+│   │   ├── routes/                 # API Routes
+│   │   ├── services/               # Business Logic
+│   │   └── middleware/             # Express Middleware
+│   ├── xtts_server_simple.py       # XTTS v2 Flask Server
+│   └── start-all.sh                # Auto-startup Script
+└── README.md                       # This File
+```
+
+---
+
+## Environment Setup
+
+Create `.env` in `NootaBackend/`:
+```
+FIREBASE_API_KEY=your_firebase_api_key
+FIREBASE_PROJECT_ID=your_firebase_project_id
+GEMINI_API_KEY=your_gemini_api_key
+XTTS_SERVER=http://localhost:8000
+NODE_ENV=production
+PORT=3000
+```
 
 ---
 
@@ -50,11 +159,20 @@ No need to learn a new language. Just speak your own — Noota handles the rest.
 
 ---
 
-### How It Works:
+## License
 
-1. **Host:** Tap "Create Room" to generate a room. You’ll get a QR code and room ID.
-2. **Joiner:** Scan the QR code or enter the room ID to join the conversation.
-3. **Talk Freely:** Start speaking in your language — the app translates and delivers your voice in the listener’s language instantly.
+This project is proprietary and intended for demonstration and commercial deployment.
 
-Noota makes multilingual communication natural, instant, and intelligent.  
-**Download now and start talking — no translator needed!**
+---
+
+## Contributors
+
+- **Mohammed Saleh** - Lead Developer, XTTS v2 Fine-tuning (1 Month Custom Training)
+
+---
+
+## Support
+
+For issues, questions, or feature requests, please open an issue on GitHub.
+
+**Built with ❤️ using SwiftUI, Node.js, and AI**

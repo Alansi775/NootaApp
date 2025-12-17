@@ -37,7 +37,7 @@ class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
             Logger.log("🔊 Audio session configured for continuous playback", level: .info)
         } catch {
-            Logger.log("❌ Error configuring audio session: \(error.localizedDescription)", level: .error)
+            Logger.log("Error configuring audio session: \(error.localizedDescription)", level: .error)
         }
     }
     
@@ -55,7 +55,7 @@ class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         
         DispatchQueue.main.async {
             self.totalChunks = totalChunks > 0 ? totalChunks : self.totalChunks
-            Logger.log("📝 Audio chunk enqueued (\(self.audioQueue.count) in queue)", level: .info)
+            Logger.log(" Audio chunk enqueued (\(self.audioQueue.count) in queue)", level: .info)
         }
         
         // إذا لم يكن هناك تشغيل جاري، ابدأ معالجة القائمة
@@ -76,7 +76,7 @@ class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         
         DispatchQueue.main.async {
             self.totalChunks = totalChunks > 0 ? totalChunks : self.totalChunks
-            Logger.log("📝 \(audioUrls.count) audio chunks enqueued (\(self.audioQueue.count) total in queue)", level: .info)
+            Logger.log(" \(audioUrls.count) audio chunks enqueued (\(self.audioQueue.count) total in queue)", level: .info)
         }
         
         // إذا لم يكن هناك تشغيل جاري، ابدأ معالجة القائمة
@@ -98,7 +98,7 @@ class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             DispatchQueue.main.async { [weak self] in
                 self?.isSpeaking = false
                 self?.isProcessingQueue = false
-                Logger.log("✅ Audio queue completed", level: .info)
+                Logger.log(" Audio queue completed", level: .info)
             }
             return
         }
@@ -123,27 +123,28 @@ class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         
         do {
             guard let audioURL = URL(string: urlString) else {
-                Logger.log("❌ Invalid audio URL", level: .error)
+                Logger.log("Invalid audio URL", level: .error)
                 removeFirstQueueItem()
                 return
             }
             
-            // تنزيل الملف الصوتي مع timeout
+            // تنزيل الملف الصوتي مع timeout أطول للـ Backend
             var request = URLRequest(url: audioURL)
-            request.timeoutInterval = 30.0
+            request.timeoutInterval = 45.0  // 45 ثانية للـ XTTS
+            request.cachePolicy = .returnCacheDataElseLoad  // استخدام الـ cache إذا توفر
             
             let (data, response) = try await URLSession.shared.data(for: request)
             
             // التحقق من رمز الحالة HTTP
             if let httpResponse = response as? HTTPURLResponse {
                 guard (200...299).contains(httpResponse.statusCode) else {
-                    Logger.log("❌ HTTP Error: \(httpResponse.statusCode)", level: .error)
+                    Logger.log("HTTP Error: \(httpResponse.statusCode)", level: .error)
                     removeFirstQueueItem()
                     return
                 }
             }
             
-            Logger.log("✅ Audio downloaded (\(data.count) bytes)", level: .info)
+            Logger.log(" Audio downloaded (\(data.count) bytes)", level: .info)
             
             // تشغيل الصوت على الـ Main Thread
             DispatchQueue.main.async { [weak self] in
@@ -151,7 +152,7 @@ class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             }
             
         } catch {
-            Logger.log("❌ Error downloading audio: \(error.localizedDescription)", level: .error)
+            Logger.log("Error downloading audio: \(error.localizedDescription)", level: .error)
             removeFirstQueueItem()
         }
     }
@@ -172,10 +173,10 @@ class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             
             // بدء التشغيل
             audioPlayer?.play()
-            Logger.log("▶️ Playing audio chunk (\(currentChunkIndex)/\(totalChunks))", level: .info)
+            Logger.log(" Playing audio chunk (\(currentChunkIndex)/\(totalChunks))", level: .info)
             
         } catch {
-            Logger.log("❌ Error creating audio player: \(error.localizedDescription)", level: .error)
+            Logger.log("Error creating audio player: \(error.localizedDescription)", level: .error)
             removeFirstQueueItem()
         }
     }
@@ -225,7 +226,7 @@ class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         audioPlayer?.play()
         DispatchQueue.main.async {
             self.isSpeaking = true
-            Logger.log("▶️ Resumed audio playback", level: .info)
+            Logger.log(" Resumed audio playback", level: .info)
         }
     }
     
@@ -233,13 +234,13 @@ class TextToSpeechService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     
     /// عند انتهاء تشغيل قطعة صوتية، انتقل للقطعة التالية
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Logger.log("✅ Audio chunk playback finished (success: \(flag))", level: .info)
+        Logger.log(" Audio chunk playback finished (success: \(flag))", level: .info)
         removeFirstQueueItem()
     }
     
     /// في حالة حدوث خطأ أثناء التشغيل، انتقل للقطعة التالية
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        Logger.log("❌ Audio decode error: \(error?.localizedDescription ?? "Unknown")", level: .error)
+        Logger.log("Audio decode error: \(error?.localizedDescription ?? "Unknown")", level: .error)
         removeFirstQueueItem()
     }
 }

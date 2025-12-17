@@ -72,7 +72,7 @@ struct Message: Identifiable, Codable {
         do {
             translations = try container.decodeIfPresent([String: [String]].self, forKey: .translations)
         } catch {
-            Logger.log("⚠️ Error decoding translations from Firestore, trying alternative format", level: .warning)
+            Logger.log(" Error decoding translations from Firestore, trying alternative format", level: .warning)
             translations = nil
         }
         
@@ -82,7 +82,7 @@ struct Message: Identifiable, Codable {
         processedChunks = try container.decodeIfPresent(Int.self, forKey: .processedChunks)
         originalAudioUrl = try container.decodeIfPresent(String.self, forKey: .originalAudioUrl)
         
-        Logger.log("✅ Message decoded successfully - ID: \(id ?? "nil"), Translations: \(translations?.description ?? "nil")", level: .debug)
+        Logger.log(" Message decoded successfully - ID: \(id ?? "nil"), Translations: \(translations?.description ?? "nil")", level: .debug)
     }
     
     func encode(to encoder: Encoder) throws {

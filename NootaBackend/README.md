@@ -2,7 +2,7 @@
 
 Professional Node.js Backend for Noota iOS App with XTTS v2 Text-to-Speech Integration
 
-## 🚀 Features
+##  Features
 
 - **XTTS v2 Integration**: Advanced voice cloning and multi-language TTS
 - **Real-time Message Processing**: Firestore listeners for instant message handling
@@ -12,7 +12,7 @@ Professional Node.js Backend for Noota iOS App with XTTS v2 Text-to-Speech Integ
 - **Error Handling**: Robust error handling with automatic retry and failed message reprocessing
 - **Production Ready**: Logging, monitoring, and health checks included
 
-## 📋 Prerequisites
+## Prerequisites
 
 - Node.js 16+ (LTS recommended)
 - Firebase Project with Firestore and Storage enabled
@@ -20,7 +20,7 @@ Professional Node.js Backend for Noota iOS App with XTTS v2 Text-to-Speech Integ
 - XTTS v2 Server running (Python backend with TTS.ai)
 - macOS, Linux, or Windows development environment
 
-## 🔧 Installation
+##  Installation
 
 1. **Clone or download the backend folder**
    ```bash
@@ -52,7 +52,7 @@ Professional Node.js Backend for Noota iOS App with XTTS v2 Text-to-Speech Integ
    NODE_ENV=development
    ```
 
-## 🎯 Quick Start
+## Quick Start
 
 ### Development Mode (with auto-reload)
 
@@ -68,7 +68,7 @@ npm start
 
 The server will start on `http://localhost:5000`
 
-## 📡 API Endpoints
+## API Endpoints
 
 ### Health Check
 ```bash
@@ -88,7 +88,7 @@ POST /api/messages/reprocess/:roomId/:messageId
 GET /api/messages/room/:roomId
 ```
 
-## 🔄 How It Works
+##  How It Works
 
 1. **Message Received**: iOS app sends message to Firestore with status `pending`
 
@@ -107,7 +107,7 @@ GET /api/messages/room/:roomId
 
 7. **Display**: iOS app receives real-time update and displays message with audio playback
 
-## 🐍 XTTS v2 Python Backend Setup
+## XTTS v2 Python Backend Setup
 
 ### Quick Setup (Using TTS.ai Library)
 
@@ -176,7 +176,7 @@ if __name__ == '__main__':
 python server.py
 ```
 
-## 🗂️ Project Structure
+## Project Structure
 
 ```
 NootaBackend/
@@ -200,7 +200,7 @@ NootaBackend/
 └── README.md                     # This file
 ```
 
-## 🔐 Environment Variables
+## Environment Variables
 
 See `.env.example` for all available options:
 
@@ -217,7 +217,7 @@ See `.env.example` for all available options:
 | `NODE_ENV` | No | Environment (default: development) |
 | `LOG_LEVEL` | No | Log level (default: info) |
 
-## 📊 Message Processing Flow
+## Message Processing Flow
 
 ```
 iOS App sends message
@@ -247,18 +247,18 @@ iOS App receives real-time update
 Display message with audio playback
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### XTTS Server Connection Failed
 ```
-❌ Error: connect ECONNREFUSED 127.0.0.1:8000
+ Error: connect ECONNREFUSED 127.0.0.1:8000
 ```
 - Ensure XTTS Python server is running on port 8000
 - Check `XTTS_SERVER_URL` in `.env`
 
 ### Firebase Authentication Error
 ```
-❌ Error: Invalid service account
+ Error: Invalid service account
 ```
 - Verify Firebase credentials in `.env`
 - Ensure all required Firebase keys are present
@@ -266,7 +266,7 @@ Display message with audio playback
 
 ### Translation API Error
 ```
-❌ Error: 401 Unauthorized
+ Error: 401 Unauthorized
 ```
 - Verify Google Cloud API key is valid
 - Ensure Translation API is enabled in Google Cloud Console
@@ -278,7 +278,7 @@ Display message with audio playback
 - Check backend logs for errors: `tail -f logs/app.log`
 - Verify all room languages are in supported languages list
 
-## 📝 Logging
+##  Logging
 
 Logs are output to console with pretty formatting in development mode.
 
@@ -292,7 +292,7 @@ npm start | grep '"level"'
 npm start 2>&1 | grep '"level":50'
 ```
 
-## 🚀 Deployment
+## Deployment
 
 ### Deploy to Google Cloud Run
 
@@ -323,7 +323,7 @@ heroku config:set FIREBASE_PROJECT_ID=...
 heroku logs --tail
 ```
 
-## 📞 Support
+##  Support
 
 For issues or questions:
 1. Check logs: `npm run dev`

@@ -1,3 +1,4 @@
+// swift-tools-version: 5.9
 // Noota/Package.swift
 // Add this `Package.swift` at the root of your Xcode project
 // This is for local Swift Package Manager dependencies, specifically the mock Google Cloud client.

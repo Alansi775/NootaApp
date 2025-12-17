@@ -13,16 +13,16 @@ struct NootaApp: App {
     @StateObject var speechManager = SpeechManager()
     @StateObject var textToSpeechService = TextToSpeechService()
     
-    // ✅ 1. تهيئة GeminiService أولاً (خدمة مستقلة)
+    //  1. تهيئة GeminiService أولاً (خدمة مستقلة)
     @StateObject var geminiService = GeminiService()
     
-    // ✅ 2. تهيئة TranslationService معتمدًا على GeminiService
+    //  2. تهيئة TranslationService معتمدًا على GeminiService
     @StateObject var translationService: TranslationService
 
     init() {
         // ... (تكوين Firebase هنا) ...
         
-        // ✅ ربط الترجمة بخدمة Gemini (مع إنشاء نسخة جديدة داخل init)
+        //  ربط الترجمة بخدمة Gemini (مع إنشاء نسخة جديدة داخل init)
         _translationService = StateObject(wrappedValue: TranslationService(geminiService: GeminiService()))
     }
 

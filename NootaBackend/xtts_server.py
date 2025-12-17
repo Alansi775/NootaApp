@@ -31,9 +31,9 @@ logger.info("Loading XTTS v2 model (this may take a minute on first run)...")
 
 try:
     tts = TTS("tts_models/multilingual/multi_speaker/xtts_v2", gpu=(device == "cuda"))
-    logger.info("✅ XTTS v2 model loaded successfully")
+    logger.info(" XTTS v2 model loaded successfully")
 except Exception as e:
-    logger.error(f"❌ Failed to load XTTS model: {e}")
+    logger.error(f"Failed to load XTTS model: {e}")
     tts = None
 
 @app.route('/health', methods=['GET'])
@@ -142,7 +142,7 @@ def synthesize():
         tts.save_wav(wav, audio_buffer)
         audio_buffer.seek(0)
 
-        logger.info(f"✅ Speech synthesis completed for {language}")
+        logger.info(f" Speech synthesis completed for {language}")
 
         return send_file(
             audio_buffer,
@@ -152,7 +152,7 @@ def synthesize():
         )
 
     except Exception as e:
-        logger.error(f"❌ TTS Error: {e}", exc_info=True)
+        logger.error(f"TTS Error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/tts/batch', methods=['POST'])
@@ -218,10 +218,10 @@ def synthesize_batch():
                     'status': 'completed',
                     'audio_base64': base64.b64encode(audio_data).decode()
                 }
-                logger.info(f"✅ Generated audio for {language}")
+                logger.info(f" Generated audio for {language}")
 
             except Exception as e:
-                logger.error(f"❌ Error synthesizing {language}: {e}")
+                logger.error(f"Error synthesizing {language}: {e}")
                 results[language] = {
                     'status': 'failed',
                     'error': str(e)
@@ -234,7 +234,7 @@ def synthesize_batch():
         })
 
     except Exception as e:
-        logger.error(f"❌ Batch TTS Error: {e}", exc_info=True)
+        logger.error(f"Batch TTS Error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/model/info', methods=['GET'])
@@ -263,5 +263,5 @@ def internal_error(error):
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8000))
-    logger.info(f"🚀 Starting Noota XTTS Server on port {port}")
+    logger.info(f" Starting Noota XTTS Server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)

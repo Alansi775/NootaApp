@@ -26,7 +26,7 @@ struct LanguageMapper {
     }
 }
 
-// ✅ نموذج أخطاء للمساعدة في التتبع
+//  نموذج أخطاء للمساعدة في التتبع
 enum TranslationError: Error, LocalizedError {
     case emptyResponse
     case apiError(String)
@@ -43,7 +43,7 @@ enum TranslationError: Error, LocalizedError {
 
 class TranslationService: ObservableObject {
     
-    // ✅ 1. إضافة خاصية GeminiService
+    //  1. إضافة خاصية GeminiService
     private let geminiService: GeminiService // 💡 يتطلب تمريره في init
     
     init(geminiService: GeminiService) {
@@ -78,7 +78,7 @@ class TranslationService: ObservableObject {
                 throw TranslationError.emptyResponse
             }
             
-            Logger.log("✅ Translation received: \(translatedText)", level: .info)
+            Logger.log(" Translation received: \(translatedText)", level: .info)
             return translatedText
             
         } catch let error as TranslationError {

@@ -2,19 +2,27 @@
 import Foundation
 
 struct ChatDisplayMessage: Identifiable, Equatable {
-    let id: String // هو نفسه id الرسالة الأصلية من Firestore
+    let id: String
     let senderID: String
-    let senderName: String // اسم المرسل للعرض
+    let senderName: String
     let originalText: String
     let originalLanguageCode: String
     let timestamp: Date
-    var displayText: String // النص الذي سيتم عرضه (الأصلي أو المترجم)
-    var translatedText: String? // النص المترجم
-    var targetLanguageCode: String? // كود اللغة المستهدفة
-    var audioUrl: String? // رابط الملف الصوتي المترجم
-    var isTranslating: Bool = false // هل ما زلنا ننتظر الترجمة؟
-    var processingStatus: String? // "processing" | "completed" | "failed"
-    var translationError: String? // لتخزين أي أخطاء في الترجمة
+    var displayText: String
+    var translatedText: String?
+    var targetLanguageCode: String?
+    
+    //  CHUNKS SUPPORT - Multiple texts with matching audio
+    var translatedChunks: [String]? // ["Hello", "My name is", "Mohammed"]
+    var audioUrls: [String]? // ["url1", "url2", "url3"] - matched by index!
+    var audioBuffers: [Data]? // Local cache of audio data
+    var currentChunkPlaying: Int = -1 // Which chunk is currently playing
+    
+    var audioUrl: String?
+    var audioBuffer: Data?
+    var isTranslating: Bool = false
+    var processingStatus: String?
+    var translationError: String?
 
     // يمكنك إضافة initializer لتحويل ChatMessage إلى ChatDisplayMessage
     init(from chatMessage: Message, senderName: String = "Unknown") {

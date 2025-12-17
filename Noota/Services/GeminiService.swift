@@ -3,7 +3,7 @@
 import Foundation
 import Combine
 import GoogleGenerativeAI
-// ✅ تأكد من استيراد مكتبة Gemini SDK الخاصة بك هنا
+//  تأكد من استيراد مكتبة Gemini SDK الخاصة بك هنا
 // مثال: import GoogleGenerativeAI // إذا كنت تستخدم مكتبة جوجل الرسمية
 // ملاحظة: بما أنني لا أملك مكتبتك، سأستخدم كود محاكاة بسيط لا يسبب أخطاء بناء.
 
@@ -23,14 +23,14 @@ class GeminiService: ObservableObject {
         // قم بتهيئة مفتاح API هنا
     }
     
-    // ⚠️ يجب عليك استبدال هذا بكود الاتصال الفعلي بـ Gemini API
+    //  يجب عليك استبدال هذا بكود الاتصال الفعلي بـ Gemini API
     func generateContent(prompt: String) async throws -> GeminiResponse {
         Logger.log("Gemini: Sending prompt for translation...", level: .debug)
         
-        // ⚠️ هذا هو الاستدعاء الحقيقي الذي يجب أن يتم:
+        //  هذا هو الاستدعاء الحقيقي الذي يجب أن يتم:
         let response = try await model.generateContent(prompt)
         
-        // ⚠️ التحقق وإرجاع النص
+        //  التحقق وإرجاع النص
         guard let text = response.text else {
              // إذا لم يكن هناك نص، يمكن أن يكون هناك خطأ API أو استجابة غير متوقعة
              throw TranslationError.emptyResponse

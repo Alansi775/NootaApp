@@ -32,11 +32,11 @@ struct QRCodeScannerContainerView: View {
 
     var body: some View {
         ZStack {
-            // ✅ استخدام QRCodeScannerView هنا لأنها UIViewControllerRepresentable
+            //  استخدام QRCodeScannerView هنا لأنها UIViewControllerRepresentable
             QRCodeScannerView(delegate: delegate)
                 .edgesIgnoringSafeArea(.all)
             
-            // ✅ طبقة الإطار والنص
+            //  طبقة الإطار والنص
             QRCodeOverlayView()
         }
     }
@@ -128,19 +128,19 @@ class ScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDel
     // دالة الديليجيت التي يتم استدعاؤها عند اكتشاف كود QR
     // دالة الديليجيت التي يتم استدعاؤها عند اكتشاف كود QR
         func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
-            // ✅ الخطوة 1: التحقق من وجود كود QR صالح
+            //  الخطوة 1: التحقق من وجود كود QR صالح
             if let metadataObject = metadataObjects.first {
                 guard let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject else { return }
                 guard let stringValue = readableObject.stringValue else { return }
 
-                // ✅ الخطوة 2: إيقاف جلسة الكاميرا فورًا بعد المسح الأول
+                //  الخطوة 2: إيقاف جلسة الكاميرا فورًا بعد المسح الأول
                 self.captureSession.stopRunning()
                 
-                // ✅ الخطوة 3: تشغيل الاهتزاز مرة واحدة فقط
+                //  الخطوة 3: تشغيل الاهتزاز مرة واحدة فقط
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
                 
-                // ✅ الخطوة 4: إرسال النتيجة عبر الـ delegate
+                //  الخطوة 4: إرسال النتيجة عبر الـ delegate
                 delegate?.didScanQRCode(result: stringValue)
             }
         }
@@ -158,12 +158,12 @@ class ScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDel
 struct QRCodeOverlayView: View {
     var body: some View {
         ZStack {
-            // ✅ إطار مربع بسيط
+            //  إطار مربع بسيط
             RoundedRectangle(cornerRadius: 25)
                 .stroke(Color.white, lineWidth: 4)
                 .frame(width: 250, height: 250)
             
-            // ✅ النص التوجيهي
+            //  النص التوجيهي
             Text("Align QR Code Here To Scan")
                 .font(.subheadline)
                 .foregroundColor(.white)

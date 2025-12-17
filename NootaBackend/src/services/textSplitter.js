@@ -21,7 +21,7 @@ export function splitTextIntoChunks(text, maxCharsPerChunk = 300) {
     // Split by sentences first
     const sentences = splitBySentences(text);
     
-    logger.debug(`📝 Text split into ${sentences.length} sentences`);
+    logger.debug(` Text split into ${sentences.length} sentences`);
 
     for (const sentence of sentences) {
       const trimmedSentence = sentence.trim();
@@ -49,7 +49,7 @@ export function splitTextIntoChunks(text, maxCharsPerChunk = 300) {
 
     return chunks;
   } catch (error) {
-    logger.error('❌ Error splitting text:', error.message);
+    logger.error('Error splitting text:', error.message);
     throw error;
   }
 }
@@ -94,11 +94,11 @@ export function validateChunks(chunks) {
         throw new Error(`Chunk ${i} is empty`);
       }
       if (chunks[i].length > 1000) {
-        logger.warn(`⚠️ Chunk ${i} is very long (${chunks[i].length} chars), XTTS may truncate it`);
+        logger.warn(` Chunk ${i} is very long (${chunks[i].length} chars), XTTS may truncate it`);
       }
     }
 
-    logger.debug(`✅ All ${chunks.length} chunks validated successfully`);
+    logger.debug(` All ${chunks.length} chunks validated successfully`);
     return true;
   } catch (error) {
     logger.error('Chunk validation error:', error.message);

@@ -17,6 +17,7 @@ struct MainAppView: View {
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = String()
     @State private var showingQRScanner = false
+    @State private var showSettings = false
     
     // ✨ تهيئة الـ Coordinator كـ State Property
     @State private var coordinator: MainAppViewCoordinator?
@@ -59,16 +60,26 @@ struct MainAppView: View {
 
     private var welcomeSection: some View {
         VStack {
-            Text("Welcome")
-                .font(.system(size: 38, weight: .light, design: .default))
-                .foregroundColor(.white.opacity(0.8))
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Welcome")
+                        .font(.system(size: 38, weight: .light, design: .default))
+                        .foregroundColor(.white.opacity(0.8))
 
-            Text(authService.user?.firstName ?? authService.user?.email ?? "User")
-                .font(.system(size: 48, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                    Text(authService.user?.firstName ?? authService.user?.email ?? "User")
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                Spacer()
+                
+                Button(action: { showSettings = true }) {
+                    Image(systemName: "gear.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(.white)
+                }
+            }
         }
         .padding(.vertical, 35)
         .padding(.horizontal, 25)
@@ -258,7 +269,7 @@ struct MainAppView: View {
                    let currentUser = authService.user,
                    let opponentUser = pairingVM.opponentUser {
                     
-                    // ✅ إنشاء ViewModel مرة واحدة فقط
+                    //  إنشاء ViewModel مرة واحدة فقط
                     let conversationVM = pairingVM.conversationViewModel ?? ConversationViewModel(
                         room: room,
                         currentUser: currentUser,
@@ -284,6 +295,12 @@ struct MainAppView: View {
                         .padding()
                 }
             }
+            
+            .sheet(isPresented: $showSettings) {
+                SettingsView(authService: authService)
+                    .environmentObject(authService)
+                    .environmentObject(firestoreService)
+            }
         }
         .onAppear(perform: setupCoordinator)
     }
@@ -299,10 +316,10 @@ struct MainAppView_Previews: PreviewProvider {
         let mockSpeechManager = SpeechManager()
         let mockTextToSpeechService = TextToSpeechService()
         
-        // ✅ 1. إنشاء كائن وهمي لـ GeminiService
+        //  1. إنشاء كائن وهمي لـ GeminiService
         let mockGeminiService = GeminiService()
         
-        // ✅ 2. تهيئة TranslationService بتمرير الـ Mock Gemini Service
+        //  2. تهيئة TranslationService بتمرير الـ Mock Gemini Service
         let mockTranslationService = TranslationService(geminiService: mockGeminiService)
         
         // 💡 تهيئة MainAppView بالخدمات
@@ -315,12 +332,12 @@ struct MainAppView_Previews: PreviewProvider {
         .environmentObject(mockFirestoreService)
         .environmentObject(mockSpeechManager)
         
-        // ❌ استبدال السطر القديم بالخدمة الجديدة
+        // استبدال السطر القديم بالخدمة الجديدة
         .environmentObject(mockTranslationService)
         
         .environmentObject(mockTextToSpeechService)
         
-        // ✅ لا تنس تمرير GeminiService
+        //  لا تنس تمرير GeminiService
         .environmentObject(mockGeminiService)
     }
 }

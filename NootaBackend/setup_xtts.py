@@ -24,7 +24,7 @@ def install_requirements():
         print(f"  Installing {package}...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", package])
     
-    print("✅ All dependencies installed")
+    print(" All dependencies installed")
 
 def main():
     """Main setup function"""
@@ -37,22 +37,22 @@ def main():
     
     # Check Python version
     if sys.version_info < (3, 8):
-        print("❌ Python 3.8+ required")
+        print("Python 3.8+ required")
         sys.exit(1)
     
-    print(f"✅ Python {sys.version_info.major}.{sys.version_info.minor} detected")
+    print(f" Python {sys.version_info.major}.{sys.version_info.minor} detected")
     
     # Install dependencies
     try:
         install_requirements()
     except subprocess.CalledProcessError as e:
-        print(f"❌ Installation failed: {e}")
+        print(f"Installation failed: {e}")
         sys.exit(1)
     
     print("""
-✅ Setup complete!
+ Setup complete!
 
-🚀 To start the XTTS v2 server:
+ To start the XTTS v2 server:
 
     python xtts_server.py
 

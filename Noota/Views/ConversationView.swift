@@ -138,7 +138,7 @@ struct LiveSpeechDisplayView: View {
     @ObservedObject var viewModel: ConversationViewModel
 
     var body: some View {
-        // ✅ عرض النص المباشر فقط عندما أكون أنا أتكلم ويوجد نص
+        //  عرض النص المباشر فقط عندما أكون أنا أتكلم ويوجد نص
         if viewModel.isContinuousMode && !viewModel.liveRecognizedText.isEmpty {
             VStack(spacing: 8) {
                 Text("You're saying:")
@@ -170,6 +170,7 @@ struct LiveSpeechDisplayView: View {
 
 struct TranslatedMessageDisplayView: View {
     @ObservedObject var viewModel: ConversationViewModel
+    @EnvironmentObject var textToSpeechService: TextToSpeechService
     @Binding var messageOpacity: Double
 
     var body: some View {
@@ -205,13 +206,13 @@ struct TranslatedMessageDisplayView: View {
     
     private var messageListView: some View {
         VStack(spacing: 12) {
-            // ✅ عرض آخر رسالة فقط
+            //  عرض آخر رسالة فقط مع تشغيل الصوت تلقائياً
             if let lastMessage = viewModel.displayedMessages.last {
-                Text(lastMessage.text)
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .multilineTextAlignment(.center)
-                    .foregroundColor(.primary)
+                ChatBubbleView(
+                    message: lastMessage,
+                    currentUserUID: viewModel.currentUser.uid,
+                    textToSpeechService: textToSpeechService
+                )
             }
         }
         .padding(30)
@@ -347,7 +348,17 @@ struct ConversationView_Previews: PreviewProvider {
         )
 
         mockVM.displayedMessages = [
-            ChatMessage(id: "1", text: "Hello, this is a test message!", timestamp: Date())
+            ChatDisplayMessage(
+                from: Message(
+                    senderUID: "test-user",
+                    originalText: "Hello, this is a test message!",
+                    translatedText: "مرحبا، هذه رسالة اختبار!",
+                    originalLanguageCode: "en-US",
+                    targetLanguageCode: "ar-SA",
+                    senderPreferredVoiceGender: "default"
+                ),
+                senderName: "Test User"
+            )
         ]
         mockVM.speechStatusText = "Recording..."
         mockVM.liveRecognizedText = "This is what I'm saying..."

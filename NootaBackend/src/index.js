@@ -10,7 +10,10 @@ import { initializeFirebase, getFirestore } from './config/firebase.js';
 import { initializeLogger } from './config/logger.js';
 import messageRoutes from './routes/messages.js';
 import healthRoutes from './routes/health.js';
+import voiceProfileRoutes from './routes/voiceProfiles.js';
+import voiceSynthesisRoutes from './routes/voiceSynthesis.js';
 import { startMessageListener } from './services/messageListener.js';
+import { initializeXTTS } from './services/xttsService.js';
 
 dotenv.config();
 
@@ -32,7 +35,7 @@ const chunksDir = path.join(uploadsDir, 'audio', 'chunks');
 [uploadsDir, voiceDir, chunksDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
-    logger.info(`📁 Created directory: ${dir}`);
+    logger.info(` Created directory: ${dir}`);
   }
 });
 
@@ -81,8 +84,13 @@ try {
 // Routes
 app.use('/api/health', healthRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/voice-profiles', voiceProfileRoutes);
+app.use('/api/voice-synthesis', voiceSynthesisRoutes);
 
-// 🎙️ API لإنشاء رسالة مع تحميل الملف الصوتي
+// Serve uploaded files statically
+app.use('/audio_references', express.static(path.join(__dirname, '../uploads/audio_references')));
+
+//  API لإنشاء رسالة مع تحميل الملف الصوتي
 app.post('/api/messages/create', voiceUpload.single('audioFile'), async (req, res) => {
   try {
     const { roomID, senderUID, originalText, originalLanguageCode, targetLanguageCode } = req.body;
@@ -118,9 +126,9 @@ app.post('/api/messages/create', voiceUpload.single('audioFile'), async (req, re
     // Add audio URL if file was uploaded
     if (audioFile) {
       messageData.originalAudioUrl = `${BACKEND_URL}/audio/voice/${audioFile.filename}`;
-      logger.info(`🎙️ Voice file uploaded: ${audioFile.filename} (${audioFile.size} bytes)`);
+      logger.info(` Voice file uploaded: ${audioFile.filename} (${audioFile.size} bytes)`);
     } else {
-      logger.warn('⚠️  No audio file provided');
+      logger.warn('  No audio file provided');
     }
 
     // Save message to Firestore
@@ -131,7 +139,7 @@ app.post('/api/messages/create', voiceUpload.single('audioFile'), async (req, re
       .add(messageData);
 
     const messageID = messageRef.id;
-    logger.info(`✅ Message saved to Firestore: ${messageID}`);
+    logger.info(` Message saved to Firestore: ${messageID}`);
 
     // Return success response
     res.json({
@@ -153,16 +161,16 @@ app.post('/api/messages/create', voiceUpload.single('audioFile'), async (req, re
 setTimeout(async () => {
   try {
     const db = getFirestore();
-    logger.info('✅ Firestore instance created successfully');
+    logger.info(' Firestore instance created successfully');
   } catch (error) {
-    logger.warn('⚠️ Firestore check failed:', error.message);
+    logger.warn(' Firestore check failed:', error.message);
   }
 }, 200);
 
 // Start message listener after a short delay to ensure Firestore is ready
 setTimeout(() => {
   try {
-    logger.info('⏳ Starting message listener (500ms delay to ensure Firestore is ready)...');
+    logger.info(' Starting message listener (500ms delay to ensure Firestore is ready)...');
     startMessageListener();
     logger.info('Message listener started');
   } catch (error) {
@@ -179,6 +187,46 @@ app.use((err, req, res, next) => {
   });
 });
 
+
+// DELETE /api/rooms/:roomId/cleanup - Delete all generated audio files for a room
+app.delete('/api/rooms/:roomId/cleanup', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const fs = require('fs');
+    const path = require('path');
+    
+    logger.info(`🗑️ Cleaning up room: ${roomId}`);
+    
+    // Delete audio chunks for this room from local storage
+    const chunksDir = path.join(uploadsDir, 'audio', 'chunks');
+    if (fs.existsSync(chunksDir)) {
+      const files = fs.readdirSync(chunksDir);
+      const roomFiles = files.filter(f => f.includes(roomId));
+      
+      roomFiles.forEach(file => {
+        try {
+          fs.unlinkSync(path.join(chunksDir, file));
+          logger.info(`  Deleted: ${file}`);
+        } catch (err) {
+          logger.error(`  Failed to delete ${file}:`, err);
+        }
+      });
+    }
+    
+    logger.info(` Room cleanup complete: ${roomId}`);
+    res.json({
+      success: true,
+      message: `Deleted audio files for room ${roomId}`
+    });
+  } catch (error) {
+    logger.error('Error cleaning up room:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
@@ -189,11 +237,17 @@ app.use((req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, '0.0.0.0', () => {
-  logger.info(`🚀 Noota Backend Server running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', async () => {
+  logger.info(` Noota Backend Server running on port ${PORT}`);
   logger.info(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`🔗 XTTS Server: ${process.env.XTTS_SERVER_URL || 'Not configured'}`);
-  logger.info(`📁 Uploads directory: ${uploadsDir}`);
+  logger.info(` Uploads directory: ${uploadsDir}`);
+  
+  // Check if local XTTS server is available
+  setTimeout(async () => {
+    logger.info(' Checking for local XTTS server...');
+    await initializeXTTS();
+  }, 1000);
 });
 
 export default app;

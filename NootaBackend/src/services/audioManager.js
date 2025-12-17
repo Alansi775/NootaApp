@@ -21,7 +21,7 @@ export async function downloadUserAudio(audioUrl) {
       throw new Error('Audio URL is required');
     }
 
-    logger.info(`📥 Loading user audio from: ${audioUrl.substring(0, 60)}...`);
+    logger.info(` Loading user audio from: ${audioUrl.substring(0, 60)}...`);
 
     // Check if it's a local Backend URL
     if (audioUrl.includes('/audio/voice/')) {
@@ -31,7 +31,7 @@ export async function downloadUserAudio(audioUrl) {
       
       logger.info(`📂 Reading local voice file: ${filePath}`);
       const audioBuffer = fs.readFileSync(filePath);
-      logger.info(`✅ Loaded user audio: ${audioBuffer.length} bytes`);
+      logger.info(` Loaded user audio: ${audioBuffer.length} bytes`);
       return audioBuffer;
     }
 
@@ -53,11 +53,11 @@ export async function downloadUserAudio(audioUrl) {
     });
 
     const audioBuffer = Buffer.from(response.data);
-    logger.info(`✅ Downloaded user audio: ${audioBuffer.length} bytes`);
+    logger.info(` Downloaded user audio: ${audioBuffer.length} bytes`);
 
     return audioBuffer;
   } catch (error) {
-    logger.error('❌ Error loading user audio:', error.message);
+    logger.error('Error loading user audio:', error.message);
     throw new Error(`Failed to load audio: ${error.message}`);
   }
 }
@@ -125,14 +125,18 @@ export async function uploadAudioChunk(audioBuffer, metadata) {
 
     // Save the audio chunk to disk
     fs.writeFileSync(chunkPath, audioBuffer);
+    
+    // Verify file was written
+    const fileSize = fs.statSync(chunkPath).size;
+    logger.info(` Chunk saved successfully: ${chunkFileName} (${fileSize} bytes) to ${chunkPath}`);
 
     // Generate local URL
     const localUrl = `${BACKEND_URL}/audio/chunks/${chunkFileName}`;
-    logger.info(`✅ Chunk saved: ${localUrl}`);
+    logger.info(` Chunk URL: ${localUrl}`);
 
     return localUrl;
   } catch (error) {
-    logger.error('❌ Error saving audio chunk:', error.message);
+    logger.error('Error saving audio chunk:', error.message);
     throw error;
   }
 }

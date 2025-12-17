@@ -16,17 +16,17 @@ class SpeechManager: ObservableObject {
     private var audioRecorder: AVAudioRecorder?
     private var recordingURL: URL?
     
-    // ✅ نظام التسجيل المستمر
+    //  نظام التسجيل المستمر
     private var isContinuousMode = false
     private var currentLanguageCode = "en-US"
     
-    // ✅ نظام إدارة الجمل الاحترافي - تتبع آخر نص أرسلناه
+    //  نظام إدارة الجمل الاحترافي - تتبع آخر نص أرسلناه
     private var sentenceBuffer = ""
     private var lastSentIndex = 0 // آخر موضع أرسلناه
     private var processingTimer: Timer?
     private let sentenceCompletionDelay: TimeInterval = 1.0
     
-    // ✅ Subject لإرسال الجمل المكتملة
+    //  Subject لإرسال الجمل المكتملة
     private let completedSentenceSubject = PassthroughSubject<String, Never>()
     var completedSentencePublisher: AnyPublisher<String, Never> {
         completedSentenceSubject.eraseToAnyPublisher()
@@ -53,9 +53,9 @@ class SpeechManager: ObservableObject {
         }
     }
     
-    // ✅ بدء التسجيل المستمر (ضغطة واحدة فقط)
+    //  بدء التسجيل المستمر (ضغطة واحدة فقط)
     func startContinuousRecording(languageCode: String) {
-        // ✅ إذا كان التسجيل المستمر نشطاً، تجاهل الطلب
+        //  إذا كان التسجيل المستمر نشطاً، تجاهل الطلب
         guard !isContinuousMode else {
             Logger.log("⏸️ Continuous recording already active. Ignoring request.", level: .info)
             return
@@ -77,22 +77,22 @@ class SpeechManager: ObservableObject {
             
             startRecognitionSession()
             
-            Logger.log("🎙️ Continuous speech recording started for language: \(languageCode).", level: .info)
+            Logger.log(" Continuous speech recording started for language: \(languageCode).", level: .info)
             
         } catch {
             self.error = error
             isContinuousMode = false
-            Logger.log("❌ Failed to start continuous recording: \(error.localizedDescription)", level: .error)
+            Logger.log("Failed to start continuous recording: \(error.localizedDescription)", level: .error)
         }
     }
     
-    // ✅ بدء جلسة التعرف على الكلام
+    //  بدء جلسة التعرف على الكلام
     private func startRecognitionSession() {
         guard isContinuousMode else { return }
         
         Logger.log("Starting new recognition session...", level: .debug)
         
-        // ✅ إيقاف الجلسة السابقة إذا كانت موجودة
+        //  إيقاف الجلسة السابقة إذا كانت موجودة
         stopCurrentRecognitionSession()
         
         do {
@@ -123,13 +123,13 @@ class SpeechManager: ObservableObject {
                 }
             }
             
-            Logger.log("✅ Recognition session started successfully", level: .debug)
+            Logger.log(" Recognition session started successfully", level: .debug)
             
         } catch {
             self.error = error
             Logger.log("Failed to start recognition session: \(error.localizedDescription)", level: .error)
             
-            // ✅ إعادة المحاولة بعد ثانيتين
+            //  إعادة المحاولة بعد ثانيتين
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 if self.isContinuousMode {
                     self.stopCurrentRecognitionSession()
@@ -139,26 +139,26 @@ class SpeechManager: ObservableObject {
         }
     }
     
-    // ✅ معالجة نتائج التعرف المستمر
+    //  معالجة نتائج التعرف المستمر
     private func handleContinuousRecognitionResult(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result = result {
             let newText = result.bestTranscription.formattedString
             self.liveRecognizedText = newText
             
-            // ✅ معالجة النص الجديد
+            //  معالجة النص الجديد
             if !newText.isEmpty {
                 processPendingText(newText)
             }
             
-            // ✅ إذا كانت النتيجة نهائية، أعد بدء الجلسة فوراً
+            //  إذا كانت النتيجة نهائية، أعد بدء الجلسة فوراً
             if result.isFinal {
-                Logger.log("✅ Result is final, restarting session for next sentence...", level: .debug)
+                Logger.log(" Result is final, restarting session for next sentence...", level: .debug)
                 if isContinuousMode {
-                    // ✅ امسح البافر قبل البدء الجديد
+                    //  امسح البافر قبل البدء الجديد
                     sentenceBuffer = ""
                     liveRecognizedText = ""
                     
-                    // ✅ بدون تأخير - restart فوري
+                    //  بدون تأخير - restart فوري
                     stopCurrentRecognitionSession()
                     DispatchQueue.main.async { [weak self] in
                         guard let self = self, self.isContinuousMode else { return }
@@ -168,15 +168,15 @@ class SpeechManager: ObservableObject {
             }
         }
         
-        // ✅ في حالة الخطأ، أعد بدء الجلسة
+        //  في حالة الخطأ، أعد بدء الجلسة
         if let recognitionError = error {
-            Logger.log("⚠️ Recognition error: \(recognitionError.localizedDescription)", level: .warning)
+            Logger.log(" Recognition error: \(recognitionError.localizedDescription)", level: .warning)
             if isContinuousMode {
-                // ✅ امسح البافر عند الخطأ أيضاً
+                //  امسح البافر عند الخطأ أيضاً
                 sentenceBuffer = ""
                 liveRecognizedText = ""
                 
-                // ✅ تأخير صغير قبل restart في حالة الخطأ
+                //  تأخير صغير قبل restart في حالة الخطأ
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     self.stopCurrentRecognitionSession()
                     self.startRecognitionSession()
@@ -185,14 +185,14 @@ class SpeechManager: ObservableObject {
         }
     }
     
-    // ✅ معالجة النص المعلق وكشف الجمل المكتملة
+    //  معالجة النص المعلق وكشف الجمل المكتملة
     private func processPendingText(_ newText: String) {
         let cleanedText = newText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedText.isEmpty else { return }
         
         sentenceBuffer = cleanedText
         
-        // ✅ كشف نقطة الإرسال بناءً على علامات ترقيم أو طول الجملة
+        //  كشف نقطة الإرسال بناءً على علامات ترقيم أو طول الجملة
         if shouldSendNow(cleanedText) {
             sendCompletedSentence()
             return
@@ -202,7 +202,7 @@ class SpeechManager: ObservableObject {
         resetProcessingTimer()
     }
     
-    // ✅ تحديد إذا يجب إرسال الجملة الآن
+    //  تحديد إذا يجب إرسال الجملة الآن
     private func shouldSendNow(_ text: String) -> Bool {
         let finalPunctuation: Set<Character> = [".", "!", "?", "؟"]
         
@@ -221,7 +221,7 @@ class SpeechManager: ObservableObject {
     }
     
     
-    // ✅ إرسال الجملة المكتملة - احترافي وسلس
+    //  إرسال الجملة المكتملة - احترافي وسلس
     private func sendCompletedSentence() {
         let cleanSentence = sentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanSentence.isEmpty else { return }
@@ -240,7 +240,7 @@ class SpeechManager: ObservableObject {
         completedSentenceSubject.send(cleanSentence)
     }
     
-    // ✅ مؤقت معالجة الجمل المعلقة
+    //  مؤقت معالجة الجمل المعلقة
     private func resetProcessingTimer() {
         processingTimer?.invalidate()
         processingTimer = Timer.scheduledTimer(withTimeInterval: sentenceCompletionDelay, repeats: false) { [weak self] _ in
@@ -248,7 +248,7 @@ class SpeechManager: ObservableObject {
         }
     }
     
-    // ✅ معالجة الجملة المحفوظة في البافر بعد الصمت
+    //  معالجة الجملة المحفوظة في البافر بعد الصمت
     private func processBufferedSentence() {
         guard !sentenceBuffer.isEmpty else { return }
         
@@ -257,7 +257,7 @@ class SpeechManager: ObservableObject {
     }
 
     
-    // ✅ إيقاف جلسة التعرف الحالية
+    //  إيقاف جلسة التعرف الحالية
     private func stopCurrentRecognitionSession() {
         Logger.log("Stopping current recognition session...", level: .debug)
         
@@ -271,10 +271,10 @@ class SpeechManager: ObservableObject {
         }
         
         isRecording = false
-        Logger.log("✅ Recognition session stopped", level: .debug)
+        Logger.log(" Recognition session stopped", level: .debug)
     }
     
-    // ✅ إيقاف التسجيل المستمر نهائياً
+    //  إيقاف التسجيل المستمر نهائياً
     func stopContinuousRecording() {
         guard isContinuousMode else { return }
         
@@ -291,7 +291,7 @@ class SpeechManager: ObservableObject {
         Logger.log("Continuous speech recording stopped.", level: .info)
     }
     
-    // ✅ إعادة ضبط الحالة
+    //  إعادة ضبط الحالة
     private func resetState() {
         liveRecognizedText = ""
         recognizedText = ""
@@ -300,35 +300,35 @@ class SpeechManager: ObservableObject {
         processingTimer = nil
     }
     
-    // ✅ الدوال القديمة للتوافق (لكن تعيد توجيه للنظام الجديد)
+    //  الدوال القديمة للتوافق (لكن تعيد توجيه للنظام الجديد)
     func startRecording(languageCode: String) {
         startContinuousRecording(languageCode: languageCode)
     }
     
     func stopRecording() {
-        // ✅ في النظام المستمر، هذا لا يوقف التسجيل بل يرسل ما في البافر
+        //  في النظام المستمر، هذا لا يوقف التسجيل بل يرسل ما في البافر
         if isContinuousMode && !sentenceBuffer.isEmpty {
             processBufferedSentence()
         }
     }
     
-    /// ✅ مسح الـ buffer - بسيط وفعّال جداً
+    ///  مسح الـ buffer - بسيط وفعّال جداً
     func clearRecognitionBuffer() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
             Logger.log("🧹 Clearing recognition buffer...", level: .debug)
             
-            // ✅ مسح البافر فقط
+            //  مسح البافر فقط
             self.liveRecognizedText = ""
             self.recognizedText = ""
             self.sentenceBuffer = ""
             
-            // ✅ إيقاف مؤقت المعالجة المعلقة
+            //  إيقاف مؤقت المعالجة المعلقة
             self.processingTimer?.invalidate()
             self.processingTimer = nil
             
-            Logger.log("✅ Buffer cleared and ready for next sentence", level: .info)
+            Logger.log(" Buffer cleared and ready for next sentence", level: .info)
         }
     }
     
@@ -357,7 +357,7 @@ class SpeechManager: ObservableObject {
         recordingURL = documentsPath.appendingPathComponent(fileName)
         
         guard let recordingURL = recordingURL else {
-            Logger.log("❌ Failed to create recording URL", level: .error)
+            Logger.log("Failed to create recording URL", level: .error)
             return
         }
         
@@ -373,9 +373,9 @@ class SpeechManager: ObservableObject {
         do {
             audioRecorder = try AVAudioRecorder(url: recordingURL, settings: settings)
             audioRecorder?.record()
-            Logger.log("🎙️ Audio recording started: \(fileName)", level: .info)
+            Logger.log(" Audio recording started: \(fileName)", level: .info)
         } catch {
-            Logger.log("❌ Failed to start audio recording: \(error.localizedDescription)", level: .error)
+            Logger.log("Failed to start audio recording: \(error.localizedDescription)", level: .error)
         }
     }
     
@@ -386,7 +386,7 @@ class SpeechManager: ObservableObject {
         recordingURL = nil
         
         if let url = url {
-            Logger.log("✅ Audio recording stopped: \(url.lastPathComponent)", level: .info)
+            Logger.log(" Audio recording stopped: \(url.lastPathComponent)", level: .info)
         }
         
         return url

@@ -1,4 +1,4 @@
-# 🏗️ Noota System Architecture
+#  Noota System Architecture
 
 Complete system design: iOS App + Node.js Backend + XTTS v2 + Firebase
 

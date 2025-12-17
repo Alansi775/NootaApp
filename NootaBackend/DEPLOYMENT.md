@@ -158,7 +158,7 @@ docker run -d \
 
 ## Heroku Deployment (Simpler alternative)
 
-⚠️ **Note**: Heroku doesn't support GPU, XTTS will be slow on CPU.
+ **Note**: Heroku doesn't support GPU, XTTS will be slow on CPU.
 
 ```bash
 # Install Heroku CLI

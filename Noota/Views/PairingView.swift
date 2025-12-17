@@ -201,10 +201,10 @@ struct PairingView_Previews: PreviewProvider {
         let mockAuthService = AuthService()
         let mockFirestoreService = FirestoreService()
         
-        // ✅ 1. إنشاء كائن Mock من GeminiService
+        //  1. إنشاء كائن Mock من GeminiService
         let mockGeminiService = GeminiService()
         
-        // ✅ 2. إنشاء كائن TranslationService وتمرير الـ Mock إليه
+        //  2. إنشاء كائن TranslationService وتمرير الـ Mock إليه
         let mockTranslationService = TranslationService(geminiService: mockGeminiService)
         
         mockAuthService.user = User(uid: "mockUid", email: "mock@example.com", username: "MockUser", preferredLanguageCode: "en-US")
@@ -216,11 +216,11 @@ struct PairingView_Previews: PreviewProvider {
             .environmentObject(mockFirestoreService)
             .environmentObject(SpeechManager())
             
-            // ❌ استبدال السطر القديم بالخدمة الجديدة
+            // استبدال السطر القديم بالخدمة الجديدة
             .environmentObject(mockTranslationService)
             
             .environmentObject(TextToSpeechService())
-            // ✅ لا تنس تمرير GeminiService أيضاً لضمان توفره في البيئة
+            //  لا تنس تمرير GeminiService أيضاً لضمان توفره في البيئة
             .environmentObject(mockGeminiService)
     }
 }

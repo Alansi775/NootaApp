@@ -164,29 +164,29 @@ class FirestoreService: ObservableObject {
                 
                 Logger.log("👤 Removing participant \(participantUserID) from room \(roomID)", level: .info)
                 
-                // ✅ الخطوة 1: إزالة المستخدم من قائمة المشاركين
+                //  الخطوة 1: إزالة المستخدم من قائمة المشاركين
                 room.participantUIDs.removeAll(where: { $0 == participantUserID })
                 room.participantLanguages?[participantUserID] = nil
                 
-                // ✅ الخطوة 2: تحديث المنطق: حذف الغرفة إذا كان عدد المشاركين 0
+                //  الخطوة 2: تحديث المنطق: حذف الغرفة إذا كان عدد المشاركين 0
                 if room.participantUIDs.isEmpty {
                     // إذا لم يبقَ أحد - احذف الغرفة
                     Logger.log("🗑️ No participants left. Deleting room \(roomID).", level: .info)
                     transaction.deleteDocument(roomRef)
                 } else if room.participantUIDs.count == 1 {
                     // إذا بقي مشارك واحد فقط - اجعل الغرفة محتفلة لكي يخرج المستخدم الآخر
-                    Logger.log("⚠️ One participant left. Marking room \(roomID) as 'ending'.", level: .info)
+                    Logger.log(" One participant left. Marking room \(roomID) as 'ending'.", level: .info)
                     room.status = .ended
                     do {
                         try transaction.setData(from: room, forDocument: roomRef)
-                        Logger.log("✅ Room \(roomID) marked as 'ended'. Waiting for last participant to leave.", level: .info)
+                        Logger.log(" Room \(roomID) marked as 'ended'. Waiting for last participant to leave.", level: .info)
                     } catch let setDataError as NSError {
                         errorPointer?.pointee = setDataError
                         return nil
                     }
                 } else {
                     // إذا كان هناك أكثر من مشارك واحد
-                    Logger.log("✅ User removed. Still have \(room.participantUIDs.count) participants. Updating room.", level: .info)
+                    Logger.log(" User removed. Still have \(room.participantUIDs.count) participants. Updating room.", level: .info)
                     do {
                         try transaction.setData(from: room, forDocument: roomRef)
                     } catch let setDataError as NSError {
@@ -197,7 +197,7 @@ class FirestoreService: ObservableObject {
                 return nil
             }
             
-            // ✅ الخطوة 3: بعد نجاح الـ Transaction، تحقق من حذف الغرفة
+            //  الخطوة 3: بعد نجاح الـ Transaction، تحقق من حذف الغرفة
             let roomDoc = try await roomRef.getDocument()
             
             if !roomDoc.exists {
@@ -334,7 +334,7 @@ class FirestoreService: ObservableObject {
                     }
                 } ?? []
                 
-                Logger.log("✅ Fetched \(fetchedMessages.count) messages with XTTS data", level: .info)
+                Logger.log(" Fetched \(fetchedMessages.count) messages with XTTS data", level: .info)
                 completion(fetchedMessages, nil)
             }
     }
@@ -345,17 +345,17 @@ class FirestoreService: ObservableObject {
     }
 
     // الكود الجديد والمُعدَّل
-    // ✅ دالة جديدة: حذف رسائل الغرفة فقط (بدون حذف الغرفة نفسها)
+    //  دالة جديدة: حذف رسائل الغرفة فقط (بدون حذف الغرفة نفسها)
     func deleteRoomMessages(roomID: String) async throws {
         Logger.log("🗑️ Starting to delete messages for room \(roomID)...", level: .info)
         
         let messagesCollection = db.collection("rooms").document(roomID).collection("messages")
         let messages = try await messagesCollection.getDocuments().documents
         
-        Logger.log("📊 Found \(messages.count) messages to delete.", level: .info)
+        Logger.log(" Found \(messages.count) messages to delete.", level: .info)
         
         if messages.isEmpty {
-            Logger.log("✅ No messages to delete for room \(roomID).", level: .info)
+            Logger.log(" No messages to delete for room \(roomID).", level: .info)
             return
         }
         
@@ -366,11 +366,11 @@ class FirestoreService: ObservableObject {
         }
         
         try await batch.commit()
-        Logger.log("✅ All \(messages.count) messages for room \(roomID) have been deleted.", level: .info)
+        Logger.log(" All \(messages.count) messages for room \(roomID) have been deleted.", level: .info)
         
         // حذف وثيقة الغرفة نفسها بعد حذف الرسائل
         try await db.collection("rooms").document(roomID).delete()
-        Logger.log("✅ Room \(roomID) document has been deleted.", level: .info)
+        Logger.log(" Room \(roomID) document has been deleted.", level: .info)
     }
     
     func deleteRoomAndSubcollections(roomID: String) async throws {

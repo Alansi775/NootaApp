@@ -1,10 +1,31 @@
+/**
+ * VOICE SYNTHESIS SERVICE WITH XTTS v2 PRIORITY
+ * 
+ * Fallback Priority Order:
+ * 1. Local XTTS v2 server (for production deployments with Docker)
+ * 2. HuggingFace Spaces XTTS (free, no auth - when available)
+ * 3. HF Inference API with token (requires valid HF token - CURRENTLY DISABLED)
+ * 4. macOS native TTS (fallback for dev testing)
+ * 5. Text only (fallback if everything fails)
+ * 
+ * NOTE: To use XTTS v2 in production:
+ * - Option A: Docker: Deploy XTTS server locally or in cloud
+ * - Option B: HF Token: Get valid token from huggingface.co and update .env
+ */
 import axios from 'axios';
 import { initializeLogger } from '../config/logger.js';
+import { generateSpeechMacOS } from './macosTtsService.js';
 
 const logger = initializeLogger();
+const isMacOS = process.platform === 'darwin';
 
+// XTTS Servers - Priority order
+const XTTS_LOCAL_URL = process.env.XTTS_LOCAL_SERVER || 'http://localhost:8000';
+const XTTS_HF_SPACES = 'https://coqui-coqui-xtts.hf.space';  // Free HF Spaces endpoint
 const XTTS_API_URL = process.env.XTTS_SERVER_URL || 'https://router.huggingface.co/models/coqui/XTTS-v2';
 const HF_TOKEN = process.env.XTTS_HF_TOKEN;
+let USE_LOCAL_XTTS = false;
+let USE_HF_SPACES = false;
 
 /**
  * Language code mapping for XTTS v2
@@ -28,6 +49,36 @@ const LANGUAGE_MAP = {
   'fi': 'fi',
   'no': 'no',
 };
+
+/**
+ * Check if XTTS servers are available (priority: local > HF Spaces > HF API)
+ * @returns {Promise<boolean>}
+ */
+export async function initializeXTTS() {
+  // Try local server first
+  try {
+    const response = await axios.get(`${XTTS_LOCAL_URL}/health`, { timeout: 5000 });
+    logger.info(' Local XTTS server is running! Using local synthesis.');
+    USE_LOCAL_XTTS = true;
+    return true;
+  } catch (error) {
+    logger.warn(' Local XTTS server not available');
+  }
+
+  // Try HF Spaces (free, no token needed)
+  try {
+    const response = await axios.get(`${XTTS_HF_SPACES}/api/predict`, { timeout: 10000 });
+    logger.info(' HuggingFace Spaces XTTS available! Using cloud synthesis (free, no token).');
+    USE_HF_SPACES = true;
+    USE_LOCAL_XTTS = false;
+    return true;
+  } catch (error) {
+    logger.warn(' HF Spaces XTTS not available');
+  }
+
+  logger.warn(' No XTTS server available. Will use fallback (translated text only)');
+  return false;
+}
 
 /**
  * Generate a simple WAV file header (for testing without XTTS API)
@@ -94,9 +145,9 @@ export async function generateSpeech(options) {
     const mappedLanguage = LANGUAGE_MAP[language.split('-')[0]] || 'en';
     logger.debug(`Generating speech: text="${text.substring(0, 50)}...", language="${mappedLanguage}"`);
 
-    // ⚠️  FALLBACK MODE: Without Hugging Face token, return placeholder audio
+    //   FALLBACK MODE: Without Hugging Face token, return placeholder audio
     if (!HF_TOKEN) {
-      logger.warn('⚠️  XTTS_HF_TOKEN not set - returning placeholder audio for testing');
+      logger.warn('  XTTS_HF_TOKEN not set - returning placeholder audio for testing');
       logger.warn('   To use real XTTS: set XTTS_HF_TOKEN in .env');
       return createSilentWAV(2); // Return 2 seconds of silent audio for testing
     }
@@ -135,7 +186,7 @@ export async function generateSpeech(options) {
     if (error.response) {
       logger.error(`Response status: ${error.response.status}`);
       if (error.response.status === 401) {
-        logger.warn('⚠️  Hugging Face API requires authentication - returning placeholder audio');
+        logger.warn('  Hugging Face API requires authentication - returning placeholder audio');
         return createSilentWAV(2);
       }
     }
@@ -244,7 +295,7 @@ export async function generateSpeechWithTranslation(options) {
   let translatedText = text; // Initialize with original text as fallback
   try {
     translatedText = await getTranslatedTextUsingGoogle(text, mappedSourceLang, mappedTargetLang);
-    logger.info(`✅ Text translated to ${mappedTargetLang}: "${translatedText.substring(0, 50)}..."`);
+    logger.info(` Text translated to ${mappedTargetLang}: "${translatedText.substring(0, 50)}..."`);
   } catch (error) {
     logger.error('Translation failed:', error.message);
     translatedText = text; // Keep fallback to original
@@ -254,45 +305,119 @@ export async function generateSpeechWithTranslation(options) {
   try {
     // Read reference audio if it's a file path
     let audioBuffer = null;
+    logger.debug(` referenceAudio parameter: ${referenceAudio}`);
+    
     if (referenceAudio) {
       try {
         const fs = await import('fs').then(m => m.promises);
+        logger.debug(`📂 Attempting to read file: ${referenceAudio}`);
         audioBuffer = await fs.readFile(referenceAudio);
-        logger.debug(`Read reference audio from file`);
+        logger.info(` Read reference audio from file: ${referenceAudio} (${audioBuffer.length} bytes)`);
       } catch (e) {
-        logger.warn(`Could not read reference audio file:`, e.message);
+        logger.warn(` Could not read reference audio file: ${referenceAudio}`, e.message);
         // Continue without voice cloning
       }
+    } else {
+      logger.warn(` No referenceAudio provided (will use default voice)`);
     }
 
-    // Step 3: Generate speech using the translated text
-    // Hugging Face serverless API expects "inputs" not "text"
-    const payload = {
-      inputs: translatedText,
-    };
+    let speechAudioBuffer;
 
-    // If reference audio provided, include it for voice cloning
-    if (audioBuffer) {
-      payload.speaker_wav_base64 = audioBuffer.toString('base64');
-      logger.debug('Including reference audio for voice cloning');
+    // If local XTTS is available, use it
+    if (USE_LOCAL_XTTS) {
+      logger.info(`🏠 Using local XTTS server at ${XTTS_LOCAL_URL}`);
+      
+      const FormData = (await import('form-data')).default;
+      const formData = new FormData();
+      
+      // Add text input
+      formData.append('text', translatedText);
+      formData.append('language', mappedTargetLang);
+      logger.debug(` FormData: text="${translatedText.substring(0, 30)}...", language="${mappedTargetLang}"`);
+      
+      // If reference audio provided, include it for voice cloning
+      if (audioBuffer && audioBuffer.length > 0) {
+        logger.info(` audioBuffer exists: ${audioBuffer.length} bytes, appending as speaker_wav`);
+        formData.append('speaker_wav', audioBuffer, 'speaker_reference.wav');
+        logger.info(`📢  Included reference audio for voice cloning (${audioBuffer.length} bytes)`);
+      } else {
+        logger.warn(` [CRITICAL] audioBuffer is empty or null! Type: ${typeof audioBuffer}, Length: ${audioBuffer?.length || 'N/A'}`);
+        logger.warn(` [CRITICAL] Will NOT include speaker_wav - XTTS will use default voice!`);
+      }
+
+      const headers = formData.getHeaders();
+
+      logger.info(`🔊 Calling local XTTS server for ${mappedTargetLang}: "${translatedText.substring(0, 40)}..."`);
+
+      const response = await axios.post(`${XTTS_LOCAL_URL}/api/synthesize`, formData, {
+        headers,
+        responseType: 'arraybuffer',
+        timeout: 120000,
+      });
+
+      speechAudioBuffer = Buffer.from(response.data);
+      logger.info(`  Local XTTS generated speech successfully (${speechAudioBuffer.length} bytes)`);
+
+
+    } else if (USE_HF_SPACES) {
+      // Use HF Spaces (free, no token needed)
+      logger.info(`☁️ Using HuggingFace Spaces XTTS (free)`);
+
+      const formData = (await import('form-data')).default;
+      const formDataInstance = new formData();
+      
+      formDataInstance.append('text', translatedText);
+      formDataInstance.append('language', mappedTargetLang);
+      
+      // If reference audio provided, include it for voice cloning
+      if (audioBuffer) {
+        formDataInstance.append('speaker_wav', audioBuffer, 'speaker_reference.wav');
+        logger.info(`📢 Including reference audio for voice cloning (${audioBuffer.length} bytes)`);
+      }
+
+      const headers = formDataInstance.getHeaders();
+
+      logger.info(`🔊 Calling HF Spaces XTTS for ${mappedTargetLang}: "${translatedText.substring(0, 40)}..."`);
+
+      const response = await axios.post(`${XTTS_HF_SPACES}/api/predict`, formDataInstance, {
+        headers,
+        responseType: 'arraybuffer',
+        timeout: 120000,
+      });
+
+      speechAudioBuffer = Buffer.from(response.data);
+      logger.info(` HF Spaces XTTS generated speech successfully (${speechAudioBuffer.length} bytes)`);
+
+    } else {
+      // Fallback to HF API (if token is available)
+      logger.info(`🌐 Using Hugging Face XTTS API`);
+
+      const FormData = (await import('form-data')).default;
+      const formDataInstance = new FormData();
+      
+      formDataInstance.append('inputs', translatedText);
+      
+      if (audioBuffer) {
+        formDataInstance.append('speaker_wav', audioBuffer, 'speaker_reference.wav');
+        logger.info(`📢 Including reference audio for voice cloning (${audioBuffer.length} bytes)`);
+      }
+
+      const headers = {
+        ...formDataInstance.getHeaders(),
+        'Authorization': `Bearer ${HF_TOKEN}`,
+      };
+
+      logger.info(`🔊 Calling Hugging Face XTTS v2 API for ${mappedTargetLang}: "${translatedText.substring(0, 40)}..."`);
+
+      const response = await axios.post(XTTS_API_URL, formDataInstance, {
+        headers,
+        responseType: 'arraybuffer',
+        timeout: 120000,
+      });
+
+      speechAudioBuffer = Buffer.from(response.data);
+      logger.info(` HF XTTS generated speech successfully (${speechAudioBuffer.length} bytes)`);
     }
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${HF_TOKEN}`,
-    };
-
-    logger.debug(`Calling Hugging Face XTTS v2 API with authentication`);
-
-    const response = await axios.post(XTTS_API_URL, payload, {
-      headers,
-      responseType: 'arraybuffer',
-      timeout: 120000,
-    });
-
-    const speechAudioBuffer = Buffer.from(response.data);
-
-    logger.info(`✅ Speech generated successfully in ${mappedTargetLang}`);
 
     return {
       translatedText: translatedText,
@@ -300,10 +425,35 @@ export async function generateSpeechWithTranslation(options) {
     };
 
   } catch (speechError) {
-    logger.error('XTTS speech generation error:', speechError.message);
-    logger.warn('⚠️  Using translated text with placeholder audio');
-    logger.info('🎯 Fallback: translatedText is defined =', !!translatedText);
-    // Always return the translated text, even if audio generation failed
+    logger.error('XTTS v2 synthesis failed:', speechError.message);
+    
+    // Fallback to macOS native TTS (if on macOS and user has no voice profile, or as dev testing)
+    if (isMacOS) {
+      try {
+        logger.info(' Falling back to macOS native TTS...');
+        const macOSAudio = await generateSpeechMacOS({
+          text: translatedText,
+          language: mappedTargetLang,
+        });
+        
+        logger.warn(' Using macOS TTS (not XTTS v2 voice cloning)');
+        logger.info('� To use XTTS v2: Setup Docker server or get valid HF token');
+        
+        return {
+          translatedText: translatedText,
+          audioBuffer: macOSAudio,
+        };
+      } catch (macError) {
+        logger.error('macOS TTS also failed:', macError.message);
+      }
+    }
+    
+    // Final fallback: return translated text only
+    logger.warn(' Using translated text only (no audio generation available)');
+    logger.info('💡 To enable voice synthesis:');
+    logger.info('   Option 1: Run XTTS v2 Docker server locally');
+    logger.info('   Option 2: Set valid XTTS_HF_TOKEN in .env from huggingface.co');
+    
     return {
       translatedText: translatedText || text,
       audioBuffer: Buffer.alloc(0),

@@ -23,10 +23,10 @@ export function startMessageListener() {
         logger.info(`🔔 ROOMS LISTENER TRIGGERED - ${new Date().toISOString()}`);
         if (!roomListenerInitialized) {
           roomListenerInitialized = true;
-          logger.info(`✅ Room listener initialized with ${roomsSnapshot.docs.length} rooms`);
+          logger.info(` Room listener initialized with ${roomsSnapshot.docs.length} rooms`);
         }
 
-        logger.debug(`📊 Rooms snapshot: ${roomsSnapshot.docs.length} rooms`);
+        logger.debug(` Rooms snapshot: ${roomsSnapshot.docs.length} rooms`);
 
         for (const roomDoc of roomsSnapshot.docs) {
           const roomId = roomDoc.id;
@@ -34,7 +34,7 @@ export function startMessageListener() {
 
           // Skip if we're already listening to this room
           if (activeListeners.has(`room-${roomId}`)) {
-            logger.debug(`⏭️ Already listening to room ${roomId}`);
+            logger.debug(` Already listening to room ${roomId}`);
             continue;
           }
 
@@ -70,7 +70,7 @@ export function startMessageListener() {
                     message.processingStatus === 'failed'
                   ) {
                     logger.debug(
-                      `⏭️ Skipping message ${messageId} (status: ${message.processingStatus})`
+                      ` Skipping message ${messageId} (status: ${message.processingStatus})`
                     );
                     continue;
                   }
@@ -81,7 +81,7 @@ export function startMessageListener() {
 
                   if (!hasText || !hasSender) {
                     logger.warn(
-                      `⚠️ Skipping message ${messageId}: missing text or sender`,
+                      ` Skipping message ${messageId}: missing text or sender`,
                       {
                         hasOriginalText: !!message.originalText,
                         hasText: !!message.text,
@@ -95,7 +95,7 @@ export function startMessageListener() {
                   logger.info(
                     `� NEW MESSAGE DETECTED: ${messageId} in room ${roomId}`
                   );
-                  logger.info(`   📝 Text: "${hasText.substring(0, 50)}..."`);
+                  logger.info(`    Text: "${hasText.substring(0, 50)}..."`);
                   logger.info(`   👤 Sender: ${hasSender}`);
                   logger.info(`   ⏱️ Status: ${message.processingStatus || 'undefined'}`);
 
@@ -107,46 +107,46 @@ export function startMessageListener() {
                     docRef: docChange.doc.ref,
                   }).catch((error) => {
                     logger.error(
-                      `❌ Error processing message ${messageId}:`,
+                      `Error processing message ${messageId}:`,
                       error.message
                     );
                   });
                 } else if (docChange.type === 'modified') {
                   modifiedCount++;
-                  logger.debug(`📝 Message modified: ${docChange.doc.id}`);
+                  logger.debug(` Message modified: ${docChange.doc.id}`);
                 }
               }
 
               if (addedCount > 0 || modifiedCount > 0) {
                 logger.debug(
-                  `📊 Snapshot summary - Added: ${addedCount}, Modified: ${modifiedCount}`
+                  ` Snapshot summary - Added: ${addedCount}, Modified: ${modifiedCount}`
                 );
               }
             },
             (error) => {
               logger.error(
-                `❌ Messages listener error for room ${roomId}:`,
+                `Messages listener error for room ${roomId}:`,
                 error.message
               );
             }
           );
 
           activeListeners.set(`room-${roomId}`, messagesUnsubscribe);
-          logger.info(`✅ Message listener attached to room: ${roomId}`);
+          logger.info(` Message listener attached to room: ${roomId}`);
         }
       },
       (error) => {
-        logger.error('❌ Rooms listener error:', error.message, error.code);
+        logger.error('Rooms listener error:', error.message, error.code);
         console.error('FULL ERROR DETAILS:', error);
       }
     );
 
     activeListeners.set('rooms-main', roomsUnsubscribe);
-    logger.info('✅ Message listener framework started successfully');
+    logger.info(' Message listener framework started successfully');
 
     return roomsUnsubscribe;
   } catch (error) {
-    logger.error('❌ Failed to start message listener:', error.message);
+    logger.error('Failed to start message listener:', error.message);
     throw error;
   }
 }

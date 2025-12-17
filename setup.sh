@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 🚀 Noota - Build and Run Script
+#  Noota - Build and Run Script
 # Usage: ./setup.sh [command]
 
 set -e  # Exit on error
@@ -10,7 +10,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}🎙️  Noota - Setup Script${NC}"
+echo -e "${YELLOW}  Noota - Setup Script${NC}"
 echo "================================"
 
 # الأوامر المتاحة
@@ -44,13 +44,13 @@ setup_ios() {
     
     # التحقق من Xcode
     if ! command -v xcodebuild &> /dev/null; then
-        echo -e "${RED}❌ Xcode غير مثبت!${NC}"
+        echo -e "${RED}Xcode غير مثبت!${NC}"
         exit 1
     fi
     
     # تثبيت CocoaPods إذا لم تكن موجودة
     if ! command -v pod &> /dev/null; then
-        echo -e "${YELLOW}⚠️  تثبيت CocoaPods...${NC}"
+        echo -e "${YELLOW}  تثبيت CocoaPods...${NC}"
         sudo gem install cocoapods
     fi
     
@@ -58,16 +58,16 @@ setup_ios() {
     echo -e "${YELLOW}📦 تثبيت Pods...${NC}"
     pod install || pod repo update && pod install
     
-    echo -e "${GREEN}✅ تم إعداد iOS بنجاح!${NC}"
+    echo -e "${GREEN} تم إعداد iOS بنجاح!${NC}"
     echo -e "${YELLOW}📌 تلميح: استخدم 'Noota.xcworkspace' وليس '.xcodeproj'${NC}"
 }
 
 # بناء iOS
 build_ios() {
-    echo -e "${YELLOW}🏗️  بناء مشروع iOS...${NC}"
+    echo -e "${YELLOW}  بناء مشروع iOS...${NC}"
     
     if [ ! -f "Noota.xcworkspace/contents.xcworkspacedata" ]; then
-        echo -e "${RED}❌ لم يتم العثور على Workspace. شغّل 'ios-setup' أولاً!${NC}"
+        echo -e "${RED}لم يتم العثور على Workspace. شغّل 'ios-setup' أولاً!${NC}"
         exit 1
     fi
     
@@ -77,7 +77,7 @@ build_ios() {
         -configuration Debug \
         -destination 'generic/platform=iOS Simulator'
     
-    echo -e "${GREEN}✅ تم بناء iOS بنجاح!${NC}"
+    echo -e "${GREEN} تم بناء iOS بنجاح!${NC}"
 }
 
 # اختبار iOS
@@ -89,7 +89,7 @@ test_ios() {
         -scheme Noota \
         -destination 'generic/platform=iOS Simulator'
     
-    echo -e "${GREEN}✅ انتهت الاختبارات!${NC}"
+    echo -e "${GREEN} انتهت الاختبارات!${NC}"
 }
 
 # إعداد Backend
@@ -98,7 +98,7 @@ setup_backend() {
     
     # التحقق من Node.js
     if ! command -v node &> /dev/null; then
-        echo -e "${RED}❌ Node.js غير مثبت! قم بتثبيته من nodejs.org${NC}"
+        echo -e "${RED}Node.js غير مثبت! قم بتثبيته من nodejs.org${NC}"
         exit 1
     fi
     
@@ -130,16 +130,16 @@ XTTS_URL=http://localhost:5002
 # Logging
 LOG_LEVEL=info
 EOF
-        echo -e "${YELLOW}⚠️  تم إنشاء .env - أكمل ملء المفاتيح!${NC}"
+        echo -e "${YELLOW}  تم إنشاء .env - أكمل ملء المفاتيح!${NC}"
     fi
     
     cd ..
-    echo -e "${GREEN}✅ تم إعداد Backend بنجاح!${NC}"
+    echo -e "${GREEN} تم إعداد Backend بنجاح!${NC}"
 }
 
 # تشغيل Backend
 start_backend() {
-    echo -e "${YELLOW}🚀 تشغيل خادم Node.js...${NC}"
+    echo -e "${YELLOW} تشغيل خادم Node.js...${NC}"
     
     if [ ! -d "NootaBackend/node_modules" ]; then
         echo -e "${YELLOW}📦 لم يتم تثبيت الـ dependencies. جاري التثبيت...${NC}"
@@ -156,7 +156,7 @@ start_xtts() {
     
     # التحقق من Python
     if ! command -v python3 &> /dev/null; then
-        echo -e "${RED}❌ Python 3 غير مثبت!${NC}"
+        echo -e "${RED}Python 3 غير مثبت!${NC}"
         exit 1
     fi
     
@@ -177,16 +177,16 @@ start_xtts() {
 
 # إعداد كل شيء
 setup_all() {
-    echo -e "${YELLOW}🔧 إعداد البيئة الكاملة...${NC}"
+    echo -e "${YELLOW} إعداد البيئة الكاملة...${NC}"
     setup_ios
     setup_backend
-    echo -e "${GREEN}✅ تم إعداد كل شيء!${NC}"
+    echo -e "${GREEN} تم إعداد كل شيء!${NC}"
     echo -e "${YELLOW}📌 الخطوة التالية: ./setup.sh all-start${NC}"
 }
 
 # تشغيل كل شيء
 start_all() {
-    echo -e "${YELLOW}🚀 تشغيل التطبيق الكامل...${NC}"
+    echo -e "${YELLOW} تشغيل التطبيق الكامل...${NC}"
     
     # شغّل Backend في خيط منفصل
     echo -e "${YELLOW}⚡ تشغيل Backend...${NC}"
@@ -199,7 +199,7 @@ start_all() {
     echo -e "${YELLOW}📱 فتح Xcode...${NC}"
     open Noota.xcworkspace
     
-    echo -e "${GREEN}✅ تم بدء كل شيء!${NC}"
+    echo -e "${GREEN} تم بدء كل شيء!${NC}"
     echo -e "${YELLOW}📌 تلميح: استخدم Cmd+R في Xcode لتشغيل التطبيق${NC}"
 }
 
@@ -216,7 +216,7 @@ clean() {
     rm -rf node_modules/ dist/
     cd ..
     
-    echo -e "${GREEN}✅ تم التنظيف بنجاح!${NC}"
+    echo -e "${GREEN} تم التنظيف بنجاح!${NC}"
 }
 
 # معالجة الأوامر
@@ -252,7 +252,7 @@ case "${1:-help}" in
         show_help
         ;;
     *)
-        echo -e "${RED}❌ أمر غير معروف: $1${NC}"
+        echo -e "${RED}أمر غير معروف: $1${NC}"
         show_help
         exit 1
         ;;
