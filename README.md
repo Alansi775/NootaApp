@@ -1,5 +1,5 @@
 # Noota: AI-Powered Live Voice Translation App
-App Demo: https://youtu.be/1xCX3dYKpNE?si=ZJxZfVB5WtwgkPtb
+App Demo: https://youtu.be/37KYB2-55Kk?si=M__kGwKftzlxyCqf
 
 **Noota** is an innovative voice communication application that enables real-time, multilingual conversations. Two people speaking different languages can communicate naturally - each hears the other person's voice translated into their native language while preserving the original speaker's unique tone and vocal characteristics.
 
